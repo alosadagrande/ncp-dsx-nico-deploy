@@ -213,9 +213,9 @@ machine-a-tron-status:
 
 helm-dep-build:
 	git submodule update --init
-	helm repo add temporal https://go.temporal.io/helm-charts 2>/dev/null || true
-	helm repo add hashicorp https://helm.releases.hashicorp.com 2>/dev/null || true
-	helm repo add nats https://nats-io.github.io/k8s/helm/charts/ 2>/dev/null || true
+	helm repo add temporal https://go.temporal.io/helm-charts --force-update
+	helm repo add hashicorp https://helm.releases.hashicorp.com --force-update
+	helm repo add nats https://nats-io.github.io/k8s/helm/charts/ --force-update
 	helm repo update >/dev/null
 	helm dependency build helm/infra-cloud/
 	helm dependency build helm/infra-site/
