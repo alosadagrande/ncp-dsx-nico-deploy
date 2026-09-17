@@ -284,6 +284,90 @@ server-side mTLS enforcement: the machine-a-tron site config sets
 `bypass_rbac = true` and requests but does not require client certificates,
 so a success here says nothing about client-cert authentication.
 
+### Running CLIs from your workstation
+
+Instead of running the CLIs as in-cluster pods, you can compile them
+locally from the upstream
+[infra-controller](https://docs.nvidia.com/infra-controller/documentation/getting-started/quick-start-guide)
+repo and run them directly from your laptop.
+
+#### Building
+
+```bash
+# nicocli (Go — REST API client)
+cd infra-controller/rest-api
+make nico-cli                     # installs to $(go env GOPATH)/bin/nicocli
+
+# nico-admin-cli (Rust — Core gRPC client)
+cd infra-controller/
+cargo build --release -p nico-admin-cli   # binary at target/release/nico-admin-cli
+```
+
+#### nicocli configuration
+
+`nicocli` reads `~/.nico/config.yaml`. The `token_command` field is the
+key setting — it runs a script that prints a bearer token to stdout and
+takes precedence over the `auth.oidc` block:
+
+```yaml
+api:
+    base: https://nico-rest-api-nico-rest.<cluster-domain>
+    name: nico
+    org: ncx
+auth:
+    token_command: /path/to/ncp-dsx-nico-deploy/utils/keycloak_token_gen.sh
+```
+
+The included `utils/keycloak_token_gen.sh` fetches the `ncx-service`
+client secret from the Keycloak admin API (not the K8s secret, which may
+be stale) and obtains a `client_credentials` grant token. It requires an
+active cluster session (`oc login` or `KUBECONFIG`).
+
+#### TLS trust for nicocli
+
+OpenShift routes (edge/reencrypt) present the ingress router's certificate,
+not the NICo CA. Build a CA bundle that includes the cluster's ingress CA:
+
+```bash
+oc get secret router-certs-default -n openshift-ingress \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > ~/.nico/ingress-ca.crt
+
+cat /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    ~/.nico/ingress-ca.crt > ~/.nico/ca-bundle.crt
+
+SSL_CERT_FILE=~/.nico/ca-bundle.crt nicocli site list
+```
+
+For passthrough routes, use the NICo root CA (`nico-root-ca-secret` in
+`cert-manager` namespace) instead of the ingress CA. To avoid setting
+`SSL_CERT_FILE` every time, add the ingress CA to the system trust store:
+
+```bash
+sudo cp ~/.nico/ingress-ca.crt /etc/pki/ca-trust/source/anchors/
+sudo update-ca-trust
+```
+
+#### nico-admin-cli from your workstation
+
+`nico-admin-cli` requires mTLS (SPIFFE certificates). Extract them from
+the `nico-api` pod and use `oc port-forward`:
+
+```bash
+oc exec -n nico-system deploy/nico-api -- cat /run/secrets/spiffe.io/tls.crt > /tmp/nico-tls.crt
+oc exec -n nico-system deploy/nico-api -- cat /run/secrets/spiffe.io/tls.key > /tmp/nico-tls.key
+oc exec -n nico-system deploy/nico-api -- cat /run/secrets/spiffe.io/ca.crt  > /tmp/nico-ca.crt
+
+# In a separate terminal
+oc port-forward -n nico-system svc/nico-api 1079:1079
+
+nico-admin-cli \
+  --api-url https://localhost:1079 \
+  --client-cert-path /tmp/nico-tls.crt \
+  --client-key-path /tmp/nico-tls.key \
+  --forge-root-ca-path /tmp/nico-ca.crt \
+  expected-machine show
+```
+
 ## License
 
 Apache License 2.0
