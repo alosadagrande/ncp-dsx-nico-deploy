@@ -5,7 +5,7 @@
 .PHONY: docker-build-ubi docker-push-ubi docker-build-core docker-push-core docker-build-nicocli docker-push-nicocli helm-dep-build helm-lint helm-template
 .PHONY: build-machine-a-tron bootstrap-machine-a-tron machine-a-tron-status
 .PHONY: deploy-prereqs deploy-cloud-infra deploy-cloud
-.PHONY: deploy-site-infra vault-init vault-admin-cert ensure-ssh-host-key deploy-site deploy-site-agent
+.PHONY: deploy-site-infra vault-init vault-admin-cert ensure-ssh-host-key deploy-site deploy-site-agent deploy-flow
 .PHONY: deploy-all-cloud patch-keycloak-route bootstrap-org deploy-all-site status undeploy
 .PHONY: reset-dpu-endpoint
 
@@ -515,7 +515,7 @@ vault-admin-cert:
 	NS=nico-system && \
 	V=vault-0 && \
 	RT=$$(oc get secret vault-unseal-secret -n $$NS -o jsonpath='{.data.root-token}' | base64 -d) && \
-        mkdir -p "$(ADMIN_CERT_DIR)" && \
+	mkdir -p "$(ADMIN_CERT_DIR)" && \
 	CERT_JSON=$$(oc exec $$V -n $$NS -c vault -- sh -c " \
 		VAULT_ADDR=https://vault.nico-system:8200 \
 		VAULT_CACERT=/tmp/ca-bundle.pem \
