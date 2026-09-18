@@ -442,6 +442,7 @@ vault-admin-cert:
 	NS=nico-system && \
 	V=vault-0 && \
 	RT=$$(oc get secret vault-unseal-secret -n $$NS -o jsonpath='{.data.root-token}' | base64 -d) && \
+        mkdir -p "$(ADMIN_CERT_DIR)" && \
 	CERT_JSON=$$(oc exec $$V -n $$NS -c vault -- sh -c " \
 		VAULT_ADDR=https://vault.nico-system:8200 \
 		VAULT_CACERT=/tmp/ca-bundle.pem \
