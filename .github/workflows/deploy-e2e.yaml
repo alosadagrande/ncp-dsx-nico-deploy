@@ -53,10 +53,18 @@ jobs:
         with:
           submodules: true
 
-      - name: Install oc and kustomize
+      - name: Install oc
         uses: redhat-actions/openshift-tools-installer@v1
         with:
           oc: "4"
+
+      # kustomize isn't published on the OpenShift mirror (only oc/helm/etc.
+      # are); it's only available from this action's "github" source.
+      - name: Install kustomize
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          source: github
+          github_pat: ${{ github.token }}
           kustomize: "5"
 
       - name: Install Helm
