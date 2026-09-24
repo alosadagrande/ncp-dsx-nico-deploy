@@ -44,10 +44,25 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Run all steps inside a UBI container instead of directly on the Ubuntu
+    # runner, matching this repo's Red Hat/UBI convention. The image has no
+    # USER directive (defaults to root), so package installs need no sudo.
+    container:
+      image: registry.access.redhat.com/ubi10/ubi:latest
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
+      # git must exist before actions/checkout runs (needed for submodule
+      # checkout); tar/gzip are needed by the tool-installer actions below
+      # to unpack their downloads. None of this is on the base ubi10/ubi image.
+      - name: Install OS prerequisites
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            git tar gzip which openssh-clients jq curl podman python3-pip make openssl
+          python3 -m pip install --no-cache-dir pyyaml
+          dnf clean all
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -69,11 +84,6 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v4
-
-      - name: Install remaining prerequisites (podman, pyyaml)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y podman python3-yaml
 
       - name: Log in to OpenShift
         id: login
