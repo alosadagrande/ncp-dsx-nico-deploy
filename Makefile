@@ -55,7 +55,7 @@ SITE_CONFIG_FLAG := $(if $(MAT),-f $(MAT_VALUES),-f $(SITE_VALUES))
 # affinity + untolerated taints). Detection runs `oc get nodes -o json` + jq;
 # if oc/jq are unreachable (empty result) it defaults to standalone, which
 # deploys anywhere. Force explicitly with VAULT_MODE=ha or VAULT_MODE=standalone.
-NODE_COUNT := $(shell oc get nodes -o json 2>/dev/null | jq '[.items[] | select(([.spec.taints[]? | select(.effect=="NoSchedule" or .effect=="NoExecute")] | length) == 0)] | length' 2>/dev/null)
+NODE_COUNT := $(shell oc get nodes -o json 2>/dev/null | jq '[.items[] | select((.spec.unschedulable != true) and (([.spec.taints[]? | select(.effect=="NoSchedule" or .effect=="NoExecute")] | length) == 0))] | length' 2>/dev/null)
 VAULT_MODE ?= $(if $(filter-out 0 1 2,$(NODE_COUNT)),ha,standalone)
 # CRC_VAULT_OVERRIDES is defined further down; use recursive '=' so it resolves
 # at recipe time regardless of definition order.
