@@ -16,6 +16,7 @@ data:
       interface: 0.0.0.0@5353
       interface: ::0@5353
       access-control: 0.0.0.0/0 allow
+      access-control: ::0/0 allow
       chroot: ""
       pidfile: "/tmp/unbound.pid"
       username: ""
