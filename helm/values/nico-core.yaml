@@ -13,8 +13,8 @@ global:
     # binaries. Pinned to an immutable tag, not `latest`: this quay.io namespace
     # already had a stale `latest` cached on cluster nodes from an unrelated
     # build, and IfNotPresent kept serving it after a new push under the same tag.
-    repository: quay.io/rh-ee-skapon/nico-core
-    tag: dhcp-hooks-20260826b
+    repository: quay.io/alosadag/nico
+    tag: "20260923"
     pullPolicy: IfNotPresent
   spiffe:
     trustDomain: nico.local
@@ -44,8 +44,11 @@ nico-api:
   # Service to live in (createNamespace defaults to false upstream).
   legacyAlias:
     enabled: false
-  # x86_64 boot artifacts (scout kernel, initrd, squashfs). Replace with
-  # your own image if targeting a different architecture or artifact set.
+  externalService:
+    enabled: true
+    externalTrafficPolicy: Local
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "10.6.85.34"
   bootArtifactContainers:
     - name: boot-artifacts-x86-64
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
@@ -111,7 +114,7 @@ nico-dhcp:
     kea:
       # Chart default is a Debian path; our UBI image installs kea from
       # ISC's repo (RHEL layout) — see docker/ubi/Dockerfile.nico-core.
-      hookLibraryPath: "/usr/lib64/kea/hooks/libdhcp.so"
+      hookLibraryPath: "/usr/lib/kea/hooks/libdhcp.so"
       # These are per-cluster values, NOT portable defaults: DHCP advertises
       # them (option 6 / provisioning) to clients, so they must be the actual
       # ClusterIPs of nico-dns/nico-pxe on THIS cluster
@@ -162,8 +165,10 @@ nico-pxe:
   # Same as nico-api.legacyAlias above — forge-system namespace we don't own.
   legacyAlias:
     enabled: false
-  # x86_64 boot artifacts (scout kernel, initrd, squashfs). Replace with
-  # your own image if targeting a different architecture or artifact set.
+  externalService:
+    enabled: true
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "10.6.85.25"
   bootArtifactContainers:
     - name: boot-artifacts-x86-64
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
@@ -217,30 +222,26 @@ unbound:
     tag: "1.26.1"
   exporter:
     enabled: false
-  # The Red Hat UBI image has no shell (/bin/sh) — it's a minimal image with
-  # only the unbound binary at /usr/sbin/unbound. The main config is injected
-  # via kustomize patch (fix-unbound-config.yaml) because the chart's
-  # configmap.yaml template only renders hardcoded keys from localConfig.
   command: ["/usr/sbin/unbound"]
   args: ["-d", "-c", "/etc/unbound/local.conf.d/unbound.cfg"]
-  # externalService:
-  #   enabled: true
-  #   annotations:
-  #     metallb.universe.tf/loadBalancerIPs: "<UNBOUND_LB_IP>"
-  # localConfig:
-  #   forwarders.conf: |
-  #     forward-zone:
-  #         name: .
-  #         forward-addr: <UPSTREAM_DNS_IP>
-  # localData:
-  #   - name: carbide-pxe.forge
-  #     addresses: ["<NICO_PXE_LB_IP>"]
-  #   - name: nico-pxe.forge
-  #     addresses: ["<NICO_PXE_LB_IP>"]
-  #   - name: carbide-static-pxe.forge
-  #     addresses: ["<NICO_PXE_LB_IP>"]
-  #   - name: carbide-api.forge
-  #     addresses: ["<NICO_API_LB_IP>"]
+  externalService:
+    enabled: true
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "10.6.85.30"
+  localConfig:
+    forwarders.conf: |
+      forward-zone:
+          name: .
+          forward-addr: 10.6.73.2
+  localData:
+    - name: carbide-pxe.forge
+      addresses: ["10.6.85.25"]
+    - name: nico-pxe.forge
+      addresses: ["10.6.85.25"]
+    - name: carbide-static-pxe.forge
+      addresses: ["10.6.85.25"]
+    - name: carbide-api.forge
+      addresses: ["10.6.85.34"]
 
 nico-flow:
   enabled: true
