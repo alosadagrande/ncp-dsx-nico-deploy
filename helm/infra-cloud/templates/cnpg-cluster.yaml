@@ -31,7 +31,13 @@ spec:
           - "ReadWriteOnce"
         resources:
           requests:
-            storage: {{ .Values.postgresql.storage.size | default "40Gi" }}
+            storage: {{ .Values.postgresql.storage.size | default "20Gi" }}
+      walVolumeClaimSpec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.walStorage.size | default "10Gi" }}
   users:
     - name: nico
       databases:
@@ -57,15 +63,20 @@ spec:
     name: nico-cloud-db-init
   backups:
     pgbackrest:
+      global:
+        repo1-retention-full: "{{ .Values.postgresql.backup.retentionFull | default 2 }}"
+        repo1-retention-full-type: count
       repos:
         - name: repo1
+          schedules:
+            full: "{{ .Values.postgresql.backup.scheduleFull | default "0 3 * * 0" }}"
           volume:
             volumeClaimSpec:
               accessModes:
                 - "ReadWriteOnce"
               resources:
                 requests:
-                  storage: {{ .Values.postgresql.backupStorage.size | default "10Gi" }}
+                  storage: {{ .Values.postgresql.backupStorage.size | default "20Gi" }}
 ---
 apiVersion: v1
 kind: ConfigMap
