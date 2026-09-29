@@ -206,7 +206,36 @@ nico-ssh-console-rs:
 nico-ntp:
   enabled: false
 unbound:
-  enabled: false
+  enabled: true
+  image:
+    repository: registry.redhat.io/hi/unbound
+    tag: "1.26.1"
+  exporter:
+    enabled: false
+  # The Red Hat UBI image has no shell (/bin/sh) — it's a minimal image with
+  # only the unbound binary at /usr/sbin/unbound. The main config is injected
+  # via kustomize patch (fix-unbound-config.yaml) because the chart's
+  # configmap.yaml template only renders hardcoded keys from localConfig.
+  command: ["/usr/sbin/unbound"]
+  args: ["-d", "-c", "/etc/unbound/local.conf.d/unbound.cfg"]
+  # externalService:
+  #   enabled: true
+  #   annotations:
+  #     metallb.universe.tf/loadBalancerIPs: "<UNBOUND_LB_IP>"
+  # localConfig:
+  #   forwarders.conf: |
+  #     forward-zone:
+  #         name: .
+  #         forward-addr: <UPSTREAM_DNS_IP>
+  # localData:
+  #   - name: carbide-pxe.forge
+  #     addresses: ["<NICO_PXE_LB_IP>"]
+  #   - name: nico-pxe.forge
+  #     addresses: ["<NICO_PXE_LB_IP>"]
+  #   - name: carbide-static-pxe.forge
+  #     addresses: ["<NICO_PXE_LB_IP>"]
+  #   - name: carbide-api.forge
+  #     addresses: ["<NICO_API_LB_IP>"]
 
 nico-flow:
   enabled: true
