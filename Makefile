@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Red Hat, Inc. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: check-prereqs
+.PHONY: check-prereqs bootstrap-cluster bootstrap-clean patch-vendor
 .PHONY: docker-build-ubi docker-push-ubi docker-build-core docker-push-core docker-build-nicocli docker-push-nicocli helm-dep-build helm-lint helm-template
 .PHONY: build-machine-a-tron bootstrap-machine-a-tron machine-a-tron-status
 .PHONY: deploy-prereqs deploy-cloud-infra deploy-cloud
-.PHONY: deploy-site-infra vault-init ensure-ssh-host-key deploy-site deploy-site-agent deploy-flow
+.PHONY: deploy-site-infra vault-init vault-admin-cert ensure-ssh-host-key deploy-site deploy-site-agent
 .PHONY: deploy-all-cloud patch-keycloak-route bootstrap-org deploy-all-site status undeploy
 .PHONY: reset-dpu-endpoint
 
@@ -16,7 +16,6 @@ UPSTREAM ?= helm/vendor/infra-controller
 NICO_REST_CHART := $(UPSTREAM)/helm/rest/nico-rest
 NICO_CORE_CHART := $(UPSTREAM)/helm
 NICO_SITE_AGENT_CHART := $(UPSTREAM)/helm/rest/nico-rest-site-agent
-NICO_FLOW_CHART := $(UPSTREAM)/helm/charts/nico-flow
 NICO_TEMPORAL_CHART := $(UPSTREAM)/rest-api/temporal-helm/temporal
 
 # Image configuration
@@ -33,7 +32,6 @@ MAT_NAMESPACE ?= nico-system
 # Off by default so `make deploy-site` cannot ship the bypass flags.
 MAT_VALUES := helm/values/nico-core-mat.yaml
 MAT ?=
-MAT_VALUES_FLAG := $(if $(MAT),-f $(MAT_VALUES),)
 
 # Site-config values layered onto nico-core.yaml. The base disables siteConfig
 # (no pools) so `make deploy-site` never silently ships RBAC bypasses; Core
@@ -47,10 +45,15 @@ SITE_CONFIG_FLAG := $(if $(MAT),-f $(MAT_VALUES),-f $(SITE_VALUES))
 # Vault topology auto-selection. HA (3-node Raft) needs >=3 schedulable nodes;
 # a single-node (SNO/VM) or 2-node cluster falls back to standalone Vault (file
 # storage) so the default `make deploy-all-site` works everywhere without a
-# separate -crc variant. Detection runs `oc get nodes`; if oc is unreachable
-# (count 0) it defaults to standalone, which deploys anywhere. Force explicitly
-# with VAULT_MODE=ha or VAULT_MODE=standalone.
-NODE_COUNT := $(shell oc get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+# separate -crc variant. "Schedulable" excludes nodes with a NoSchedule/
+# NoExecute taint (control-plane, infra, etc.) — the vault chart's default
+# hard pod anti-affinity needs one *untainted* node per replica, and counting
+# tainted nodes here causes `deploy-site-infra` to pick ha on clusters that
+# don't actually have 3 nodes free to run it (FailedScheduling: pod anti-
+# affinity + untolerated taints). Detection runs `oc get nodes -o json` + jq;
+# if oc/jq are unreachable (empty result) it defaults to standalone, which
+# deploys anywhere. Force explicitly with VAULT_MODE=ha or VAULT_MODE=standalone.
+NODE_COUNT := $(shell oc get nodes -o json 2>/dev/null | jq '[.items[] | select((.spec.unschedulable != true) and (([.spec.taints[]? | select(.effect=="NoSchedule" or .effect=="NoExecute")] | length) == 0))] | length' 2>/dev/null)
 VAULT_MODE ?= $(if $(filter-out 0 1 2,$(NODE_COUNT)),ha,standalone)
 # CRC_VAULT_OVERRIDES is defined further down; use recursive '=' so it resolves
 # at recipe time regardless of definition order.
@@ -102,8 +105,16 @@ check-prereqs:
 	fi; \
 	if oc whoami >/dev/null 2>&1; then \
 		echo "  [OK]      oc is logged in to $$(oc whoami --show-server 2>/dev/null)"; \
+		SC=$$(oc get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name}{end}' 2>/dev/null); \
+		if [ -n "$$SC" ]; then \
+			echo "  [OK]      default StorageClass: $$SC"; \
+		else \
+			echo "  [MISSING] no default StorageClass — PG, Vault, NATS, and Temporal PVCs will fail"; \
+			MISSING=1; \
+		fi; \
 	else \
 		echo "  [MISSING] oc is not logged in to a cluster"; \
+		echo "            (skipping default StorageClass check)"; \
 		MISSING=1; \
 	fi; \
 	echo "" && \
@@ -113,6 +124,43 @@ check-prereqs:
 	else \
 		echo "All prerequisites satisfied."; \
 	fi
+
+# =============================================================================
+# Cluster Bootstrap (optional) — create the OpenShift cluster NICo deploys onto
+# =============================================================================
+# NICo itself is entirely day-2. This target is for fresh test beds: it
+# installs a single-node OpenShift (SNO) on a local libvirt VM (static IP)
+# via the Assisted Installer, plus LVM Storage so a default StorageClass
+# exists. Self-contained in cluster/bootstrap.sh — a trimmed SNO-only
+# extraction of the rh-ecosystem-edge/openshift-dpf cluster chain; nothing
+# DPU/DPF-related runs. Idempotent: an already-installed cluster just
+# (re)downloads its kubeconfig.
+#
+# Required: NICO_BASE_DOMAIN, NICO_API_IP (node IP; DNS for
+# api.<name>.<domain> and *.apps.<name>.<domain> must resolve to it),
+# NICO_GW, NICO_DNS. All other NICO_* vars (name, version, pull secret,
+# netmask, VM sizing, bridge) have defaults in cluster/bootstrap.sh —
+# empty values passed here fall through to those defaults.
+# Host prerequisites: authenticated aicli, libvirt (virt-install), and a
+# bridge (default mgmt-br) on the network that hosts NICO_API_IP.
+
+bootstrap-cluster:
+	@bash cluster/bootstrap.sh install \
+		NICO_CLUSTER_NAME='$(NICO_CLUSTER_NAME)' \
+		NICO_BASE_DOMAIN='$(NICO_BASE_DOMAIN)' \
+		NICO_API_IP='$(NICO_API_IP)' \
+		NICO_GW='$(NICO_GW)' \
+		NICO_DNS='$(NICO_DNS)' \
+		NICO_NETMASK='$(NICO_NETMASK)' \
+		NICO_OPENSHIFT_VERSION='$(NICO_OPENSHIFT_VERSION)' \
+		NICO_PULL_SECRET='$(NICO_PULL_SECRET)' \
+		NICO_VM_PREFIX='$(NICO_VM_PREFIX)'
+
+bootstrap-clean:
+	@bash cluster/bootstrap.sh clean \
+		NICO_CLUSTER_NAME='$(NICO_CLUSTER_NAME)' \
+		NICO_VM_PREFIX='$(NICO_VM_PREFIX)' \
+		NICO_DISK_PATH='$(NICO_DISK_PATH)'
 
 # =============================================================================
 # Container Images
@@ -211,8 +259,33 @@ machine-a-tron-status:
 # Helm Charts
 # =============================================================================
 
+# Patches for the read-only upstream submodule. Kustomize post-renderers are
+# not applied to helm hook resources, so OpenShift-breaking bits in
+# pre-install hook templates are fixed with a git patch instead. See
+# patches/vendor/README.md. Idempotent: skips if already applied, fails
+# loudly if the submodule commit moved so the patch no longer applies.
+VENDOR_PATCH := patches/vendor/infra-controller.patch
+
+patch-vendor:
+	git submodule update --init
+	@cd $(UPSTREAM) && \
+	if git apply --reverse --check $(CURDIR)/$(VENDOR_PATCH) >/dev/null 2>&1; then \
+		echo "Vendor patch already applied"; \
+	elif git apply --check $(CURDIR)/$(VENDOR_PATCH) >/dev/null 2>&1; then \
+		git apply $(CURDIR)/$(VENDOR_PATCH) && echo "Vendor patch applied"; \
+	else \
+		echo "ERROR: $(VENDOR_PATCH) does not apply to the checked-out $(UPSTREAM) commit." >&2; \
+		echo "The submodule may have moved — rebase the patch or update the pin." >&2; \
+		exit 1; \
+	fi
+
 helm-dep-build:
 	git submodule update --init
+	$(MAKE) patch-vendor
+	helm repo add temporal https://go.temporal.io/helm-charts --force-update
+	helm repo add hashicorp https://helm.releases.hashicorp.com --force-update
+	helm repo add nats https://nats-io.github.io/k8s/helm/charts/ --force-update
+	helm repo update >/dev/null
 	helm dependency build helm/infra-cloud/
 	helm dependency build helm/infra-site/
 
@@ -339,7 +412,7 @@ bootstrap-org:
 # =============================================================================
 
 deploy-site-infra: helm-dep-build
-	@echo "=== Vault topology: $(VAULT_MODE) (detected $(NODE_COUNT) node(s)) ==="
+	@echo "=== Vault topology: $(VAULT_MODE) (detected $(NODE_COUNT) schedulable node(s)) ==="
 	helm upgrade --install -n nico-system nico-site-infra \
 		helm/infra-site/ \
 		--create-namespace --timeout 15m \
@@ -399,6 +472,8 @@ vault-init:
 	oc exec $$V -n $$NS -- sh -c "export VAULT_TOKEN=$$RT VAULT_SKIP_VERIFY=true && \
 		vault write nicoca/config/ca pem_bundle=@/tmp/ca-bundle.pem && \
 		vault write nicoca/roles/nico-cluster allow_any_name=true allowed_uri_sans='spiffe://*' max_ttl=720h ttl=720h key_type=ec key_bits=256 require_cn=false use_csr_common_name=true && \
+		echo 'Creating nico-cli-client PKI role for nico-admin-cli client certs...' && \
+		vault write nicoca/roles/nico-cli-client allow_any_name=true enforce_hostnames=false client_flag=true server_flag=false max_ttl=24h ttl=1h key_type=ec key_bits=256 ou=nico-cli-client && \
 		vault auth enable kubernetes 2>/dev/null || true && \
 		vault write auth/kubernetes/config kubernetes_host=https://\$$KUBERNETES_SERVICE_HOST:\$$KUBERNETES_SERVICE_PORT && \
 		echo 'path \"nicoca/sign/nico-cluster\" { capabilities = [\"create\", \"update\"] }' | vault policy write cert-manager-nico-policy - && \
@@ -429,6 +504,30 @@ vault-init:
 	echo "{\"apiVersion\":\"cert-manager.io/v1\",\"kind\":\"ClusterIssuer\",\"metadata\":{\"name\":\"vault-nico-issuer\"},\"spec\":{\"vault\":{\"path\":\"nicoca/sign/nico-cluster\",\"server\":\"https://vault.nico-system.svc:8200\",\"caBundle\":\"$$CA_B64\",\"auth\":{\"kubernetes\":{\"role\":\"cert-manager-nico-issuer\",\"mountPath\":\"/v1/auth/kubernetes\",\"secretRef\":{\"name\":\"vault-nicoca-issuer-token\",\"key\":\"token\"}}}}}}" | oc apply -f - && \
 	echo "=== Vault fully configured ==="
 
+ADMIN_CERT_DIR := $(HOME)/.nico
+
+# Issue a short-lived (24h) client certificate from Vault PKI for
+# nico-admin-cli. The cert's issuer CN (nico-root-ca) must be listed in
+# nico-api's auth.additionalIssuerCns for the internal RBAC to recognize
+# it as ForgeAdminCLI. Run after vault-init; re-run when the cert expires.
+vault-admin-cert:
+	@echo "=== Issuing nico-admin-cli client certificate ===" && \
+	NS=nico-system && \
+	V=vault-0 && \
+	RT=$$(oc get secret vault-unseal-secret -n $$NS -o jsonpath='{.data.root-token}' | base64 -d) && \
+        mkdir -p "$(ADMIN_CERT_DIR)" && \
+	CERT_JSON=$$(oc exec $$V -n $$NS -c vault -- sh -c " \
+		VAULT_ADDR=https://vault.nico-system:8200 \
+		VAULT_CACERT=/tmp/ca-bundle.pem \
+		VAULT_TOKEN=$$RT \
+		vault write -format=json nicoca/issue/nico-cli-client \
+			common_name=nico-admin ttl=24h") && \
+	echo "$$CERT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; print(d['certificate'])" > $(ADMIN_CERT_DIR)/admin-tls.crt && \
+	echo "$$CERT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; print(d['private_key'])" > $(ADMIN_CERT_DIR)/admin-tls.key && \
+	echo "$$CERT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; print(d['issuing_ca'])" > $(ADMIN_CERT_DIR)/admin-ca.crt && \
+	chmod 600 $(ADMIN_CERT_DIR)/admin-tls.key && \
+	echo "Certificate written to $(ADMIN_CERT_DIR)/admin-tls.{crt,key,ca.crt} (valid 24h)"
+
 # nico-ssh-console-rs expects a pre-existing `ssh-host-key` Secret that no
 # chart in this repo creates.
 ensure-ssh-host-key:
@@ -442,11 +541,21 @@ ensure-ssh-host-key:
 			--from-file=ssh_host_ed25519_key_pub="$$TMPDIR/ssh_host_ed25519_key.pub" \
 	)
 
-deploy-site: ensure-ssh-host-key
+deploy-site: ensure-ssh-host-key patch-vendor
+	@# extraDnsNames[0]: legacy DPU agent compatibility (issue #2823).
+	@# extraDnsNames[1]: passthrough route hostname so nico-admin-cli can
+	@#   connect via the route without TLS hostname mismatch (the server cert
+	@#   must include the route's FQDN in its SANs).
 	helm upgrade --install -n nico-system nico-core \
 		$(NICO_CORE_CHART) --wait --timeout 10m \
 		-f helm/values/nico-core.yaml $(SITE_CONFIG_FLAG) \
+		--set 'nico-api.certificate.extraDnsNames[0]=carbide-api.forge' \
+		--set 'nico-api.certificate.extraDnsNames[1]=nico-api-grpc-nico-system.$(CLUSTER_DOMAIN)' \
 		--post-renderer $(POST_RENDERER) --post-renderer-args $(SITE_KUSTOMIZE)
+	@# Create a passthrough route for nico-admin-cli gRPC access (HTTP/2
+	@# requires passthrough — edge/reencrypt downgrades to HTTP/1.1).
+	@oc get route nico-api-grpc -n nico-system >/dev/null 2>&1 || \
+		oc create route passthrough nico-api-grpc --service=nico-api --port=grpc -n nico-system
 
 # Site configuration
 SITE_NAME ?=
@@ -511,12 +620,11 @@ endif
 		--set envConfig.TEMPORAL_SUBSCRIBE_NAMESPACE=$$SITE_ID_VAL \
 		--set bootstrap.enabled=true
 
-deploy-flow:
-	helm upgrade --install -n nico-system nico-flow \
-		$(NICO_FLOW_CHART) --wait --timeout 5m \
-		-f helm/values/nico-core.yaml $(MAT_VALUES_FLAG)
+# NOTE: there is no standalone deploy-flow target — Flow ships inside the
+# nico-core umbrella chart (values: nico-flow.enabled=true), so installing it
+# separately collides on the namespace and the `flow` ServiceAccount.
 
-deploy-all-site: deploy-site-infra vault-init deploy-site deploy-flow
+deploy-all-site: deploy-site-infra vault-init deploy-site
 
 # =============================================================================
 # CRC (single-node) — overrides for local development on CodeReady Containers
@@ -539,7 +647,7 @@ deploy-site-infra-crc: helm-dep-build
 		$(CRC_VAULT_OVERRIDES)
 
 deploy-all-cloud-crc: deploy-prereqs deploy-cloud-infra-crc deploy-cloud
-deploy-all-site-crc: deploy-site-infra-crc vault-init deploy-site deploy-flow
+deploy-all-site-crc: deploy-site-infra-crc vault-init deploy-site
 
 # =============================================================================
 # Status and Cleanup

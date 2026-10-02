@@ -105,6 +105,19 @@ patches:
       kind: Service
       name: nico-dns
 
+# Remap unbound ports 53 → 5353 (same pattern as nico-dns, avoids anyuid SCC)
+  - path: patches/fix-unbound-port.yaml
+    target:
+      kind: Deployment
+      name: nico-unbound
+
+  # Inject main unbound.cfg into ConfigMap (chart template only renders
+  # hardcoded keys, ignores extra localConfig entries)
+  - path: patches/fix-unbound-config.yaml
+    target:
+      kind: ConfigMap
+      name: unbound-local-config
+
   # Mount scout cloud-init snippets in nico-pxe. Pairs with the
   # scout-cloud-init.yaml ConfigMap resource above. Remove both when
   # debug access to scout is no longer needed.

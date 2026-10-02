@@ -8,7 +8,8 @@ External Secrets Operator, and OpenShift Routes.
 ## Prerequisites
 
 - OpenShift 4.21+
-- `oc` and `helm` CLI tools
+- `oc`, `helm`, `kustomize`, `podman`, `python3`, `git`, `curl`, `jq` and
+  `ssh-keygen` tools.
 - Git submodule initialized (`git submodule update --init`)
 - A **default StorageClass** with dynamic RWO provisioning. The PostgreSQL,
   Vault, NATS, and Temporal PVCs use `storageClass: null` (the cluster
@@ -17,7 +18,67 @@ External Secrets Operator, and OpenShift Routes.
   provisioner installed and marked default first — LVM Storage (LVMS) or
   OpenShift Data Foundation. See `minimal-setup-requirements.md`.
 
+Verify all required tools are installed. Some checks (cluster login, default
+StorageClass) require an active cluster session (`oc login` or
+`export KUBECONFIG=...`):
+
+```bash
+make check-prereqs
+```
+
+### Optional: bootstrap the cluster
+
+No cluster? `make bootstrap-cluster` creates one: a single-node OpenShift on
+a local libvirt VM (static IP) installed via the Assisted Installer, plus
+LVM Storage so a default StorageClass exists. The whole path is
+self-contained in `cluster/bootstrap.sh` (a trimmed SNO-only extraction of
+the `rh-ecosystem-edge/openshift-dpf` cluster chain) — nothing DPU/DPF-
+related runs.
+
+```bash
+make bootstrap-cluster \
+    NICO_BASE_DOMAIN=example.com \
+    NICO_API_IP=192.168.110.10 \
+    NICO_GW=192.168.110.1 \
+    NICO_DNS=192.168.110.2
+```
+
+- `NICO_BASE_DOMAIN`, `NICO_API_IP` (node IP; DNS for
+  `api.<name>.<domain>`, `*.apps.<name>.<domain>` must resolve to it),
+  `NICO_GW`, and `NICO_DNS` are required.
+- Optional: `NICO_CLUSTER_NAME` (default `nico-lab`),
+  `NICO_OPENSHIFT_VERSION` (default `4.22.7-multi`), `NICO_PULL_SECRET`
+  (default `openshift_pull.json` — a path next to the Makefile or absolute),
+  `NICO_NETMASK` (default `24`), and VM sizing `NICO_RAM` / `NICO_VCPUS` /
+  `NICO_DISK1` / `NICO_DISK2` (default 41 GB / 14 / 120+80 GiB). All
+  defaults live in `cluster/bootstrap.sh`.
+- Host prerequisites: `aicli` installed and authenticated, libvirt
+  (`virt-install`), and a Linux bridge on the network that hosts
+  `NICO_API_IP` (auto-detected; override with `NICO_BRIDGE`).
+- Idempotent: if the cluster is already installed in aicli, the run only
+  (re)downloads the kubeconfig and LVM state.
+
+When it finishes, point `oc` at the new cluster:
+
+```bash
+export KUBECONFIG=$PWD/cluster/kubeconfig
+```
+
+then continue with the normal flow below.
+
+Tear the bootstrapped cluster and VM down again with:
+
+```bash
+make bootstrap-clean
+```
+
 ## Deployment
+
+The upstream charts come from the read-only `helm/vendor/infra-controller`
+submodule. A few OpenShift-breaking issues live in helm hook resources, which
+kustomize post-renderers cannot patch, so `make patch-vendor` applies a git
+patch before any deploy (wired into `helm-dep-build` and `deploy-site`; see
+`patches/vendor/README.md`).
 
 ### 1. Operators and ClusterIssuers
 
@@ -99,8 +160,10 @@ make vault-init
 
 ### 6. NICo Core
 
-Installs the upstream `nico` chart with values overrides and kustomize
-patches (Crunchy secret keys, SCC fixes, migration fixes).
+Installs the upstream `nico` umbrella chart (Core, Flow, and the site
+workloads) with values overrides and kustomize patches (Crunchy secret keys,
+SCC fixes, migration fixes). Flow ships inside this chart — there is no
+standalone Flow deploy.
 
 ```bash
 make deploy-site
@@ -274,6 +337,98 @@ hardware (or machine-a-tron) has been discovered. Note it does *not* prove
 server-side mTLS enforcement: the machine-a-tron site config sets
 `bypass_rbac = true` and requests but does not require client certificates,
 so a success here says nothing about client-cert authentication.
+
+### Running CLIs from your workstation
+
+Instead of running the CLIs as in-cluster pods, you can compile them
+locally from the upstream
+[infra-controller](https://docs.nvidia.com/infra-controller/documentation/getting-started/quick-start-guide)
+repo and run them directly from your laptop.
+
+#### Building
+
+```bash
+# nicocli (Go — REST API client)
+cd infra-controller/rest-api
+make nico-cli                     # installs to $(go env GOPATH)/bin/nicocli
+
+# nico-admin-cli (Rust — Core gRPC client)
+cd infra-controller/
+cargo build --release -p nico-admin-cli   # binary at target/release/nico-admin-cli
+```
+
+#### nicocli configuration
+
+`nicocli` reads `~/.nico/config.yaml`. The `token_command` field is the
+key setting — it runs a script that prints a bearer token to stdout and
+takes precedence over the `auth.oidc` block:
+
+```yaml
+api:
+    base: https://nico-rest-api-nico-rest.<cluster-domain>
+    name: nico
+    org: ncx
+auth:
+    token_command: /path/to/ncp-dsx-nico-deploy/utils/keycloak_token_gen.sh
+```
+
+The included `utils/keycloak_token_gen.sh` fetches the `ncx-service`
+client secret from the Keycloak admin API (not the K8s secret, which may
+be stale) and obtains a `client_credentials` grant token. It requires an
+active cluster session (`oc login` or `KUBECONFIG`).
+
+#### TLS trust for nicocli
+
+OpenShift routes (edge/reencrypt) present the ingress router's certificate,
+not the NICo CA. Build a CA bundle that includes the cluster's ingress CA:
+
+```bash
+oc get secret router-certs-default -n openshift-ingress \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > ~/.nico/ingress-ca.crt
+
+cat /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+    ~/.nico/ingress-ca.crt > ~/.nico/ca-bundle.crt
+
+SSL_CERT_FILE=~/.nico/ca-bundle.crt nicocli site list
+```
+
+To avoid setting `SSL_CERT_FILE` every time, add the ingress CA to the
+system trust store:
+
+```bash
+sudo cp ~/.nico/ingress-ca.crt /etc/pki/ca-trust/source/anchors/
+sudo update-ca-trust
+```
+
+#### nico-admin-cli from your workstation
+
+`nico-admin-cli` uses gRPC (HTTP/2) with mTLS. `make deploy-site`
+automatically creates a passthrough route (`nico-api-grpc`) and adds
+the route hostname to the server certificate SANs, so the CLI can
+connect from outside the cluster without port-forwarding.
+
+**Step 1 — Issue a client certificate** (valid 24h, re-run when it expires):
+
+```bash
+make vault-admin-cert
+```
+
+This writes `~/.nico/admin-tls.{crt,key}` and `~/.nico/admin-ca.crt`.
+The cert is issued by the Vault PKI role `nico-cli-client` (created by
+`make vault-init`). The issuer CN (`nico-root-ca`) must be listed in
+`nico-api`'s `auth.additionalIssuerCns` (set in `nico-core.yaml`) for
+the internal RBAC to recognize it as `ForgeAdminCLI`.
+
+**Step 2 — Connect via route:**
+
+```bash
+nico-admin-cli \
+  --api-url https://nico-api-grpc-nico-system.<cluster-domain>:443 \
+  --client-cert-path ~/.nico/admin-tls.crt \
+  --client-key-path ~/.nico/admin-tls.key \
+  --forge-root-ca-path ~/.nico/admin-ca.crt \
+  expected-machine show
+```
 
 ## License
 
