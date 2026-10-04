@@ -47,8 +47,8 @@ Existing networks are **not modified**:
 |----|------|
 | `172.16.11.1` | L3 gateway — SVI on sn2201dc-mgmt-sw-01/02 (see note below) |
 | `172.16.11.2` | control-plane-3 subinterface (`bond-ns.211`) |
-| `172.16.11.6` | tray-6 AMI MegaRAC BMC (static, re-assigned from 172.16.2.x) |
-| `172.16.11.7` | tray-7 AMI MegaRAC BMC (static, re-assigned from 172.16.2.x) |
+| `172.16.11.6` | tray-6 AMI MegaRAC BMC (static, re-assigned from `172.16.2.66`) |
+| `172.16.11.7` | tray-7 AMI MegaRAC BMC (static, re-assigned from `172.16.2.67`) |
 | `172.16.11.16` | tray-6 DPU BlueField OpenBMC (static) |
 | `172.16.11.17` | tray-7 DPU BlueField OpenBMC (static) |
 | `172.16.11.26` | tray-6 host OOB (`oob_net0`) |
@@ -78,8 +78,8 @@ NICo's DNS service runs at the MetalLB VIP `172.16.10.10:53` and is authoritativ
 
 | Record | Type | Value | Notes |
 |--------|------|-------|-------|
-| `api.nico-site.launchpad.local` | A | `172.16.3.x` | SNO Kubernetes API (north-south IP of control-plane-3) |
-| `*.apps.nico-site.launchpad.local` | A | `172.16.3.x` | SNO Ingress / OpenShift Routes |
+| `api.nico-site.launchpad.local` | A | `172.16.2.123` | SNO Kubernetes API (control-plane-3 Host Management IP) |
+| `*.apps.nico-site.launchpad.local` | A | `172.16.2.123` | SNO Ingress / OpenShift Routes |
 | `nico-api.nico-site.launchpad.local` | A | `172.16.10.10` | NICo gRPC API (MetalLB VIP) |
 | `compute-tray-6.nico-site.launchpad.local` | A | `172.16.10.101` | Tray-6 during provisioning |
 | `compute-tray-7.nico-site.launchpad.local` | A | `172.16.10.102` | Tray-7 during provisioning |
@@ -108,6 +108,8 @@ Single L2 VIP on VLAN 210, announced from `bond-ns.210` on control-plane-3. NICo
 ## Switch Configuration
 
 ### sn5600-csl-01 and sn5600-csl-02 — Cumulus Linux (NVUE)
+
+> OOB management IPs: `sn5600-csl-01` → `172.16.0.10`, `sn5600-csl-02` → `172.16.0.11`
 
 These are the collapsed spine-leaf switches. All three nodes (SNO, tray-6, tray-7) connect here.
 
@@ -144,6 +146,8 @@ nv config apply
 
 ### sn2201dc-mgmt-sw-01 — Cumulus Linux (NVUE)
 
+> OOB management IP: `172.16.0.14`
+
 Carries tray-6 and tray-7 AMI MegaRAC BMC ports.
 
 ```bash
@@ -163,6 +167,8 @@ nv config apply
 ```
 
 ### sn2201dc-mgmt-sw-02 — Cumulus Linux (NVUE)
+
+> OOB management IP: `172.16.0.15`
 
 Carries tray-6 and tray-7 DPU BMC, DPU host OOB, and host OOB ports.
 
@@ -291,7 +297,7 @@ spec:
    ┌────────────────────────────────────┐
    │  control-plane-3 (SNO OpenShift)   │
    │                                    │
-   │  bond-ns       → 172.16.3.x       │  (existing north-south)
+   │  bond-ns       → 172.16.2.123     │  (Host Management — actual node IP)
    │  bond-ns.210   → 172.16.10.2/24   │  NICo provisioning
    │  bond-ns.211   → 172.16.11.2/24   │  BMC management
    │  bond-ns.212   → 172.16.12.2/24   │  workload
@@ -326,6 +332,67 @@ spec:
                         │   SVI vlan211: 172.16.11.1/24            │
                         └──────────────────────────────────────────┘
 ```
+
+---
+
+## Switch Change Best Practices (Cumulus Linux / NVUE)
+
+### Before every change
+
+```bash
+# 1. Open a BMC console session to the switch as a safety net
+#    (so you retain access if SSH drops)
+ssh admin@<switch-oob-ip>
+
+# 2. Checkpoint the current config
+nv config save
+nv config checkpoint
+```
+
+### Apply with auto-rollback
+
+Always use `--timeout` so the switch reverts automatically if you lose connectivity:
+
+```bash
+nv config apply --timeout 120
+```
+
+If the change looks good and SSH/connectivity is still alive, confirm to keep it:
+
+```bash
+nv config apply confirm
+```
+
+If you do not confirm within the timeout, Cumulus reverts automatically — no manual action needed.
+
+### Manual rollback (if you still have access)
+
+```bash
+# List available checkpoints
+nv config history
+
+# Revert to a specific checkpoint
+nv config revert <checkpoint-id>
+```
+
+### Persist after confirming
+
+```bash
+# Write confirmed config to disk so it survives a reboot
+nv config save
+```
+
+### Summary: safe change sequence
+
+| Step | Command |
+|------|---------|
+| 1. Open BMC console | (before SSH changes) |
+| 2. Checkpoint | `nv config save && nv config checkpoint` |
+| 3. Stage changes | `nv set ...` |
+| 4. Apply with timer | `nv config apply --timeout 120` |
+| 5. Verify | ping, SSH, check MACs |
+| 6. Confirm | `nv config apply confirm` |
+| 7. Persist | `nv config save` |
 
 ---
 
