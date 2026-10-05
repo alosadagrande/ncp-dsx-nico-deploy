@@ -14,7 +14,7 @@ global:
     # already had a stale `latest` cached on cluster nodes from an unrelated
     # build, and IfNotPresent kept serving it after a new push under the same tag.
     repository: quay.io/alosadag/nico
-    tag: "20260923"
+    tag: "20261005"
     pullPolicy: IfNotPresent
   spiffe:
     trustDomain: nico.local
@@ -48,14 +48,14 @@ nico-api:
     enabled: true
     externalTrafficPolicy: Local
     annotations:
-      metallb.universe.tf/loadBalancerIPs: "10.6.85.34"
+      metallb.universe.tf/loadBalancerIPs: "172.16.2.14"
   bootArtifactContainers:
     - name: boot-artifacts-x86-64
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
       command: ["sh", "-c", "cp -r /x86_64 /forge-boot-artifacts/blobs/internal"]
-    # - name: boot-artifacts-aarch64
-    #   image: <registry>/boot-artifacts-aarch64:latest
-    #   command: ["sh", "-c", "cp -r /aarch64 /apt /firmware /boot-artifacts/blobs/internal"]
+    - name: boot-artifacts-aarch64
+      image: quay.io/alosadag/boot-artifacts-aarch64:latest-amd64
+      command: ["sh", "-c", "cp -r /aarch64 /apt /forge-boot-artifacts/blobs/internal"]
   resources:
     requests:
       cpu: 250m
@@ -116,19 +116,20 @@ nico-dhcp:
       # ISC's repo (RHEL layout) — see docker/ubi/Dockerfile.nico-core.
       hookLibraryPath: "/usr/lib/kea/hooks/libdhcp.so"
       # These are per-cluster values, NOT portable defaults: DHCP advertises
-      # them (option 6 / provisioning) to clients, so they must be the actual
-      # ClusterIPs of nico-dns/nico-pxe on THIS cluster
-      # (`oc get svc nico-dns nico-pxe -n nico-system`). Left as the chart's
-      # fail-loud placeholders here so a fresh `make deploy-site` cannot
-      # silently advertise a stale IP copied from another cluster. Override
-      # per-cluster; the machine-a-tron overlay (nico-core-mat.yaml) carries
-      # example values for the emulated flow.
+      # them (option 6 / provisioning) to the booting client. For REAL hardware
+      # the client is on the physical provisioning network (172.16.2.x here), so
+      # these must be addresses it can actually reach: the MetalLB VIPs of
+      # nico-dns/nico-pxe, NOT the in-cluster ClusterIPs (172.30.x is only
+      # reachable from inside the cluster). ClusterIPs apply only to the
+      # emulated machine-a-tron flow, where the "machines" are in-cluster pods
+      # (see nico-core-mat.yaml). Cross-check against nico-dns.localData below,
+      # which already resolves the .forge boot names to these same VIPs.
       hookParameters:
-        nameservers: "172.30.57.9"
+        nameservers: "172.16.2.13"       # nico-dns MetalLB VIP (externalService below)
         # nico-ntp is disabled; reuse nico-dns's IP — just needs to parse
         # as valid IPv4, nothing here depends on a real NTP server.
-        ntpServer: "172.30.57.9"
-        provisioningServer: "172.30.103.117"
+        ntpServer: "172.16.2.13"
+        provisioningServer: "172.16.2.12"  # nico-pxe MetalLB VIP (externalService below)
       # subnet4[].id isn't emitted by this chart at all; auto-numbered
       # post-render instead (helm/plugins/kustomize-post-renderer/render.sh).
       # Kea 3.0.4 requires it; upstream's own Kea 2.2.0 auto-assigns it and
@@ -168,14 +169,14 @@ nico-pxe:
   externalService:
     enabled: true
     annotations:
-      metallb.universe.tf/loadBalancerIPs: "10.6.85.25"
+      metallb.universe.tf/loadBalancerIPs: "172.16.2.12"
   bootArtifactContainers:
     - name: boot-artifacts-x86-64
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
       command: ["sh", "-c", "cp -r /x86_64 /forge-boot-artifacts/blobs/internal"]
-    # - name: boot-artifacts-aarch64
-    #   image: <registry>/boot-artifacts-aarch64:latest
-    #   command: ["sh", "-c", "cp -r /aarch64 /apt /firmware /boot-artifacts/blobs/internal"]
+    - name: boot-artifacts-aarch64
+      image: quay.io/alosadag/boot-artifacts-aarch64:latest-amd64
+      command: ["sh", "-c", "cp -r /aarch64 /apt /forge-boot-artifacts/blobs/internal"]
 nico-ssh-console-rs:
   enabled: true
   # Chart hardcodes port 22 in its static config.toml — same ambient-
@@ -227,21 +228,21 @@ unbound:
   externalService:
     enabled: true
     annotations:
-      metallb.universe.tf/loadBalancerIPs: "10.6.85.30"
+      metallb.universe.tf/loadBalancerIPs: "172.16.2.13"
   localConfig:
     forwarders.conf: |
       forward-zone:
           name: .
-          forward-addr: 10.6.73.2
+          forward-addr: 172.16.0.1
   localData:
     - name: carbide-pxe.forge
-      addresses: ["10.6.85.25"]
+      addresses: ["172.16.2.12"]
     - name: nico-pxe.forge
-      addresses: ["10.6.85.25"]
+      addresses: ["172.16.2.12"]
     - name: carbide-static-pxe.forge
-      addresses: ["10.6.85.25"]
+      addresses: ["172.16.2.12"]
     - name: carbide-api.forge
-      addresses: ["10.6.85.34"]
+      addresses: ["172.16.2.14"]
 
 nico-flow:
   enabled: true

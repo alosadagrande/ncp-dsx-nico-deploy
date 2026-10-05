@@ -1,0 +1,20 @@
+apiVersion: hive.openshift.io/v1
+kind: ClusterDeployment
+metadata:
+  name: sno-worker-01
+  namespace: sno-worker-01
+spec:
+  baseDomain: inbound-int.se-lab.eng.rdu2.dc.redhat.com
+  clusterInstallRef:
+    group: extensions.hive.openshift.io
+    kind: AgentClusterInstall
+    name: sno-worker-01
+    version: v1beta1
+  clusterName: sno-worker-01
+  platform:
+    agentBareMetal:
+      agentSelector:
+        matchLabels:
+          cluster-name: sno-worker-01
+  pullSecretRef:
+    name: pull-secret

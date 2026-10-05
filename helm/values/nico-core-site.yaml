@@ -14,8 +14,8 @@
 # are intentionally absent, and attestation_enabled / tpm_required keep their
 # secure defaults. Real security enforcement stays on.
 #
-# Prefixes and pools configured for the RDU2 SE lab (hub0 cluster).
-# BMC/iDRAC network: 10.6.75.0/24, host inband network: 10.6.85.0/24.
+# Prefixes and pools configured for the NVL72 LaunchPad cluster.
+# FLAT: BMC compute-tray: 172.16.2.0/24, host inband: 172.16.2.0/24.
 # =============================================================================
 
 nico-api:
@@ -31,13 +31,13 @@ nico-api:
       allow_zero_dpu_hosts = true
       dpu_policy = "ignore"
 
-      # BMC/iDRAC network — site-explorer scans underlay segments via Redfish.
-      [networks.bmc]
-      type = "underlay"
-      prefix = "10.6.75.0/24"
-      gateway = "10.6.75.254"
-      mtu = 1500
-      reserve_first = 5
+      # Underlay DPU provisioning compute-tray network
+      #[networks.bmc]
+      #type = "underlay"
+      #prefix = "172.16.2.0/24"
+      #gateway = "172.16.2.1"
+      #mtu = 1500
+      #reserve_first = 5
 
       # Placeholder admin segment — required by DB constraint
       # (network_segment::admin() fails if none exist), but unused
@@ -49,23 +49,13 @@ nico-api:
       mtu = 1500
       reserve_first = 0
 
-      # Host inband network for zero-DPU hosts (Dell 14G).
-      # Linked to FLAT VPC so machines on this segment are eligible
-      # for instance allocation via autoNetwork.
-      [networks.telcolab-inband]
+      # Host inband network. FLAT
+      [networks.nvl72-inband]
       type = "hostinband"
-      prefix = "10.6.85.0/24"
-      gateway = "10.6.85.254"
+      prefix = "172.16.2.0/24"
+      gateway = "172.16.2.1"
       mtu = 1500
       reserve_first = 5
-      vpc_name = "telcolab-flat"
-
-      # FLAT VPC for zero-DPU hosts. Instances live directly on the
-      # underlay — no DPU overlay. Routing/ACL is the network
-      # operator's responsibility.
-      [vpcs.telcolab-flat]
-      organization_id = "ncx"
-      network_virtualization_type = "flat"
 
       [pools.lo-ip]
       type = "ipv4"
