@@ -8,8 +8,8 @@
 
 global:
   image:
-    repository: quay.io/rh-ee-skapon
-    tag: latest
+    repository: quay.io/alosadag
+    tag: 20261005
     pullPolicy: IfNotPresent
   certificate:
     issuerRef:
