@@ -9,7 +9,7 @@
 global:
   image:
     repository: quay.io/alosadag
-    tag: 20261005
+    tag: "20261005"
     pullPolicy: IfNotPresent
   certificate:
     issuerRef:
