@@ -76,12 +76,23 @@ Each tray has:
 
 ### Ethernet Switches (Cumulus Linux — NVUE CLI)
 
-| Hostname | IP | Role |
+| Hostname (LLDP) | OOB IP | Role |
 |---|---|---|
-| `sn5600-sp-01` | `172.16.0.10` | Collapsed spine-leaf |
-| `sn5600-sp-02` | `172.16.0.11` | Collapsed spine-leaf |
-| `sn2201-mg-01` | `172.16.0.12` | OOB management |
-| `sn2201-mg-02` | `172.16.0.13` | OOB management |
+| `gb300-01-sn5600-csl-01` | `172.16.0.10` | Collapsed spine-leaf |
+| `gb300-01-sn5600-csl-02` | `172.16.0.11` | Collapsed spine-leaf |
+| `gb300-01-sn2201-mg-01` | `172.16.0.12` | OOB management |
+| `gb300-01-sn2201-mg-02` | `172.16.0.13` | OOB management |
+| `gb300-01-sn2201dc-mgmt-sw-01` | `172.16.0.14` | DC management (tray BMC ports) |
+| `gb300-01-sn2201dc-mgmt-sw-02` | `172.16.0.15` | DC management (tray DPU BMC + host OOB ports) |
+
+**sn2201dc uplinks to fabric (confirmed via LLDP):**
+
+| DC switch | Local port | → CSL switch | CSL port |
+|---|---|---|---|
+| `sn2201dc-mgmt-sw-01` | `swp49` | `sn5600-csl-01` | `swp61s0` |
+| `sn2201dc-mgmt-sw-01` | `swp51` | `sn5600-csl-02` | `swp61s0` |
+| `sn2201dc-mgmt-sw-02` | `swp49` | `sn5600-csl-01` | `swp61s1` |
+| `sn2201dc-mgmt-sw-02` | `swp51` | `sn5600-csl-02` | `swp61s1` |
 
 > **Warning:** switch changes can break full environment access. Do not mix NVUE and Linux config methods on the same switch.
 
@@ -112,22 +123,3 @@ High-performance shared storage — native WEKA client or NFS v4 only (no SMB).
 | NFS v4 | `weka-nfs.nvidialaunchpad.internal:/gb300-weka_fs` → `172.16.5.31–40` |
 
 - Storage traffic **must** use dedicated storage interfaces (`172.16.5.x`), not north-south or management interfaces
-
----
-
-## MetalLB LoadBalancer (In-Progress Runbook)
-
-> Documented in `launchpad/docs/metallb-loadbalancer-setup.md`. **Not yet deployed in this repo.**
-
-Plans to wire MetalLB VIPs for NICo Core site-profile provisioning services:
-- DHCP, DNS, PXE, SSH console, gRPC API — sharing one VIP via the OLM MetalLB Operator
-
-Integration path in this repo:
-1. Install operator → prereqs chart
-2. Define `IPAddressPool` + L2/BGP advertisement → `infra-site` chart
-3. Enable `externalService` on 5 Core services → `nico-core-<site>.yaml` values overlay
-
-**Known blockers:**
-- Hardcoded `targetPort` for DNS (`53→5353`) and SSH console (`22→2222`)
-- No IP SANs on the API TLS certificate
-- Kea hook params still point at ClusterIPs (not VIPs)

@@ -23,7 +23,7 @@
 
         <!-- CSL port label - SNO trunk -->
         <mxCell id="4"
-          value="swp16s1&lt;br&gt;&lt;span style=&quot;color:#93C5FD;&quot;&gt;SNO trunk · VLAN 210,212&lt;/span&gt;"
+          value="swp16s1&lt;br&gt;&lt;span style=&quot;color:#93C5FD;&quot;&gt;SNO trunk · VLAN 210&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E40AF;strokeColor=none;fontColor=#BFDBFE;fontSize=8;opacity=60;"
           vertex="1" parent="1">
           <mxGeometry x="265" y="101" width="130" height="26" as="geometry" />
@@ -31,7 +31,7 @@
 
         <!-- CSL port label - tray uplinks -->
         <mxCell id="5"
-          value="swp3s1 (tray-6)&lt;br&gt;&lt;span style=&quot;color:#86EFAC;&quot;&gt;swp4s0 (tray-7) · VLAN 210&lt;/span&gt;"
+          value="swp3s1 (tray-6)&lt;br&gt;&lt;span style=&quot;color:#86EFAC;&quot;&gt;swp4s0 (tray-7) · VLAN 210 → N-S after provision&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#166534;strokeColor=none;fontColor=#86EFAC;fontSize=8;opacity=60;"
           vertex="1" parent="1">
           <mxGeometry x="505" y="101" width="130" height="26" as="geometry" />
@@ -39,7 +39,7 @@
 
         <!-- control-plane-3 / SNO -->
         <mxCell id="6"
-          value="&lt;b&gt;control-plane-3&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#86EFAC;&quot;&gt;SNO OpenShift · nico-system ns&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:9px;&quot;&gt;&lt;span style=&quot;color:#9CA3AF;&quot;&gt;bond-ns      →  172.16.2.123  (Host Mgmt)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;bond-ns.210  →  172.16.10.2/24&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#FCD34D;&quot;&gt;bond-ns.211  →  172.16.11.2/24&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#34D399;&quot;&gt;bond-ns.212  →  172.16.12.2/24&lt;/span&gt;&lt;/div&gt;"
+          value="&lt;b&gt;control-plane-3&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#86EFAC;&quot;&gt;SNO OpenShift · nico-system ns&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:9px;&quot;&gt;&lt;span style=&quot;color:#9CA3AF;&quot;&gt;bond-ns      →  172.16.2.123  (Host Mgmt + BMC access)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;bond-ns.210  →  172.16.10.2/24&lt;/span&gt;&lt;/div&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#14532D;strokeColor=#10B981;strokeWidth=2;fontColor=white;fontSize=12;verticalAlign=top;spacingTop=8;"
           vertex="1" parent="1">
           <mxGeometry x="18" y="225" width="235" height="225" as="geometry" />
@@ -55,7 +55,7 @@
 
         <!-- compute-tray-6 -->
         <mxCell id="8"
-          value="&lt;b&gt;compute-tray-6&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#C4B5FD;&quot;&gt;BlueField B24 DPU&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;DPU B3420 p0  (boot NIC → VLAN 210)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  e0:9d:73:87:03:70&lt;br&gt;&amp;nbsp;&amp;nbsp;DHCP reservation → 172.16.10.101&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;Tray BMC (AMI MegaRAC → VLAN 211)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#FDE68A;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  18:3d:2d:9b:b3:f4  (sw-01 swp34)&lt;br&gt;&amp;nbsp;&amp;nbsp;172.16.2.66 → 172.16.11.6 (re-assign)&lt;br&gt;&amp;nbsp;&amp;nbsp;DPU BMC  e0:9d:73:87:03:85  (sw-02 swp34)&lt;/span&gt;&lt;/div&gt;"
+          value="&lt;b&gt;compute-tray-6&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#C4B5FD;&quot;&gt;BlueField B24 DPU&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;DPU B3420 p0  (boot NIC → VLAN 210)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  e0:9d:73:87:03:70&lt;br&gt;&amp;nbsp;&amp;nbsp;DHCP reservation → 172.16.10.101&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#9CA3AF;&quot;&gt;Tray BMC (AMI MegaRAC — existing 172.16.2.x)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#D1D5DB;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  18:3d:2d:9b:b3:f4  →  172.16.2.66&lt;br&gt;&amp;nbsp;&amp;nbsp;DPU BMC  e0:9d:73:87:03:85  (sw-02 swp34)&lt;/span&gt;&lt;/div&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3B1764;strokeColor=#8B5CF6;strokeWidth=2;fontColor=white;fontSize=12;verticalAlign=top;spacingTop=8;"
           vertex="1" parent="1">
           <mxGeometry x="615" y="208" width="265" height="150" as="geometry" />
@@ -63,7 +63,7 @@
 
         <!-- compute-tray-7 -->
         <mxCell id="9"
-          value="&lt;b&gt;compute-tray-7&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#C4B5FD;&quot;&gt;BlueField B24 DPU&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;DPU B3420 p0  (boot NIC → VLAN 210)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  e0:9d:73:86:d4:52&lt;br&gt;&amp;nbsp;&amp;nbsp;DHCP reservation → 172.16.10.102&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;Tray BMC (AMI MegaRAC → VLAN 211)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#FDE68A;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  18:3d:2d:9b:b4:12  (sw-01 swp35)&lt;br&gt;&amp;nbsp;&amp;nbsp;172.16.2.67 → 172.16.11.7 (re-assign)&lt;br&gt;&amp;nbsp;&amp;nbsp;DPU BMC  e0:9d:73:86:d4:67  (sw-02 swp35)&lt;/span&gt;&lt;/div&gt;"
+          value="&lt;b&gt;compute-tray-7&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#C4B5FD;&quot;&gt;BlueField B24 DPU&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#DDD6FE;&quot;&gt;DPU B3420 p0  (boot NIC → VLAN 210)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#60A5FA;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  e0:9d:73:86:d4:52&lt;br&gt;&amp;nbsp;&amp;nbsp;DHCP reservation → 172.16.10.102&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#9CA3AF;&quot;&gt;Tray BMC (AMI MegaRAC — existing 172.16.2.x)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#D1D5DB;&quot;&gt;&amp;nbsp;&amp;nbsp;MAC  18:3d:2d:9b:b4:12  →  172.16.2.67&lt;br&gt;&amp;nbsp;&amp;nbsp;DPU BMC  e0:9d:73:86:d4:67  (sw-02 swp35)&lt;/span&gt;&lt;/div&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3B1764;strokeColor=#8B5CF6;strokeWidth=2;fontColor=white;fontSize=12;verticalAlign=top;spacingTop=8;"
           vertex="1" parent="1">
           <mxGeometry x="615" y="390" width="265" height="150" as="geometry" />
@@ -71,23 +71,23 @@
 
         <!-- DC Management Switches -->
         <mxCell id="10"
-          value="&lt;b&gt;sn2201dc-mgmt-sw-01 (172.16.0.14)  ·  sn2201dc-mgmt-sw-02 (172.16.0.15)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#FCD34D;&quot;&gt;BMC Network · VLAN 211 · 172.16.11.0/24&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#FDE68A;&quot;&gt;sw-01: swp34 (tray-6 BMC) · swp35 (tray-7 BMC)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#D97706;&quot;&gt;tray-6: 172.16.2.66 → 172.16.11.6 · tray-7: 172.16.2.67 → 172.16.11.7&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#FDE68A;&quot;&gt;sw-02: swp34/35 DPU BMC · swp6/7 host OOB&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#D97706;&quot;&gt;NICo registers BMC IP + credentials (one-time)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#F59E0B;&quot;&gt;SVI vlan211 → 172.16.11.1/24  (gateway)&lt;/span&gt;&lt;/div&gt;"
-          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#78350F;strokeColor=#F59E0B;strokeWidth=2;fontColor=white;fontSize=12;verticalAlign=top;spacingTop=8;"
+          value="&lt;b&gt;sn2201dc-mgmt-sw-01 (172.16.0.14)  ·  sn2201dc-mgmt-sw-02 (172.16.0.15)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#9CA3AF;&quot;&gt;Unchanged — no VLAN modifications&lt;/span&gt;&lt;hr/&gt;&lt;div style=&quot;text-align:left;font-size:8px;&quot;&gt;&lt;span style=&quot;color:#D1D5DB;&quot;&gt;tray-6 BMC (sw-01 swp34)  →  172.16.2.66  (stays on existing Host Mgmt VLAN)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#D1D5DB;&quot;&gt;tray-7 BMC (sw-01 swp35)  →  172.16.2.67  (stays on existing Host Mgmt VLAN)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;color:#9CA3AF;&quot;&gt;NICo accesses BMCs via control-plane-3 bond-ns (172.16.2.123)&lt;/span&gt;&lt;/div&gt;"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#374151;strokeColor=#6B7280;strokeWidth=2;fontColor=white;fontSize=12;verticalAlign=top;spacingTop=8;"
           vertex="1" parent="1">
-          <mxGeometry x="155" y="582" width="590" height="95" as="geometry" />
+          <mxGeometry x="155" y="582" width="590" height="85" as="geometry" />
         </mxCell>
 
         <!-- Legend - main -->
         <mxCell id="11"
-          value="&lt;b style=&quot;font-size:10px;&quot;&gt;Legend&lt;/b&gt;&lt;br&gt;&lt;div style=&quot;text-align:left;font-size:9px;&quot;&gt;&lt;font color=&quot;#3B82F6&quot;&gt;━━━━&lt;/font&gt; VLAN 210 — Provisioning  172.16.10.0/24&lt;br&gt;&lt;font color=&quot;#F59E0B&quot;&gt;━━━━&lt;/font&gt; VLAN 211 — BMC Isolated  172.16.11.0/24&lt;/div&gt;"
+          value="&lt;b style=&quot;font-size:10px;&quot;&gt;Legend&lt;/b&gt;&lt;br&gt;&lt;div style=&quot;text-align:left;font-size:9px;&quot;&gt;&lt;font color=&quot;#3B82F6&quot;&gt;━━━━&lt;/font&gt; VLAN 210 — Provisioning  172.16.10.0/24&lt;br&gt;&lt;font color=&quot;#9CA3AF&quot;&gt;━━━━&lt;/font&gt; Existing — BMC/OOB  172.16.2.x (unchanged)&lt;/div&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#CBD5E1;strokeWidth=1;fontColor=#1E293B;fontSize=10;verticalAlign=top;spacingTop=6;"
           vertex="1" parent="1">
           <mxGeometry x="18" y="688" width="340" height="62" as="geometry" />
         </mxCell>
 
-        <!-- Legend - VLAN 212 -->
+        <!-- Legend - post-provision -->
         <mxCell id="12"
-          value="&lt;b style=&quot;font-size:9px;&quot;&gt;VLAN 212 — Workload  172.16.12.0/24&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px;color:#6B7280;&quot;&gt;Activated after provisioning completes.&lt;br&gt;swp3s1/swp4s0 move from VLAN 210 → 212.&lt;/span&gt;"
+          value="&lt;b style=&quot;font-size:9px;&quot;&gt;Post-provision — North-South  172.16.3.x&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px;color:#6B7280;&quot;&gt;After provisioning, swp3s1/swp4s0 move from&lt;br&gt;VLAN 210 to the existing north-south VLAN.&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#CBD5E1;strokeWidth=1;fontColor=#1E293B;fontSize=9;verticalAlign=top;spacingTop=6;"
           vertex="1" parent="1">
           <mxGeometry x="370" y="688" width="250" height="62" as="geometry" />
@@ -101,12 +101,12 @@
           <mxGeometry x="638" y="688" width="244" height="62" as="geometry" />
         </mxCell>
 
-        <!-- VLAN 212 post-provision annotation -->
+        <!-- Post-provision annotation -->
         <mxCell id="14"
-          value="→ VLAN 212 after provision"
-          style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=7;fontColor=#34D399;"
+          value="→ north-south VLAN (172.16.3.x) after provision"
+          style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=7;fontColor=#9CA3AF;"
           vertex="1" parent="1">
-          <mxGeometry x="570" y="138" width="160" height="18" as="geometry" />
+          <mxGeometry x="570" y="138" width="200" height="18" as="geometry" />
         </mxCell>
 
         <!-- SNO → CSL (gray solid, LACP bond) -->
@@ -117,9 +117,9 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <!-- SNO → CSL (blue dashed, + VLAN 210/212) -->
+        <!-- SNO → CSL (blue dashed, + VLAN 210) -->
         <mxCell id="16"
-          value="+ VLAN 210, 212"
+          value="+ VLAN 210"
           style="edgeStyle=none;html=1;endArrow=none;startArrow=none;strokeColor=#3B82F6;strokeWidth=1.5;dashed=1;dashPattern=6 3;fontSize=8;fontColor=#3B82F6;exitX=0.48;exitY=0;exitDx=0;exitDy=0;entryX=0.2;entryY=1;entryDx=0;entryDy=0;"
           edge="1" source="6" target="3" parent="1">
           <mxGeometry relative="1" as="geometry" />
@@ -141,19 +141,19 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 
-        <!-- tray-6 BMC → DC mgmt (VLAN 211, amber solid) -->
-        <mxCell id="19"
-          value="VLAN 211 (BMC)"
-          style="edgeStyle=none;html=1;endArrow=none;startArrow=none;strokeColor=#F59E0B;strokeWidth=2;fontSize=8;fontColor=#F59E0B;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.48;entryY=0;entryDx=0;entryDy=0;"
-          edge="1" source="8" target="10" parent="1">
-          <mxGeometry relative="1" as="geometry" />
+        <!-- OVN prerequisite note -->
+        <mxCell id="20"
+          value="&lt;b style=&quot;font-size:8px;color:#92400E;&quot;&gt;⚠ OVN Prerequisite&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:7px;color:#78350F;&quot;&gt;Set &lt;code&gt;routingViaHost: true&lt;/code&gt; on the&lt;br&gt;Network operator &lt;i&gt;before&lt;/i&gt; MetalLB — brief&lt;br&gt;network blip during OVN reconfiguration.&lt;/span&gt;"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;strokeWidth=1.5;fontColor=#78350F;fontSize=9;verticalAlign=top;spacingTop=5;"
+          vertex="1" parent="1">
+          <mxGeometry x="18" y="458" width="235" height="58" as="geometry" />
         </mxCell>
 
-        <!-- tray-7 BMC → DC mgmt (VLAN 211, amber dashed) -->
-        <mxCell id="20"
-          value="VLAN 211 (BMC)"
-          style="edgeStyle=none;html=1;endArrow=none;startArrow=none;strokeColor=#F59E0B;strokeWidth=2;dashed=1;dashPattern=5 2;fontSize=8;fontColor=#F59E0B;exitX=0.43;exitY=1;exitDx=0;exitDy=0;entryX=0.69;entryY=0;entryDx=0;entryDy=0;"
-          edge="1" source="9" target="10" parent="1">
+        <!-- SNO → DC mgmt (existing 172.16.2.x, gray dashed) -->
+        <mxCell id="19"
+          value="172.16.2.x (existing — BMC access)"
+          style="edgeStyle=none;html=1;endArrow=none;startArrow=none;strokeColor=#6B7280;strokeWidth=1.5;dashed=1;dashPattern=4 4;fontSize=8;fontColor=#9CA3AF;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.18;entryY=0;entryDx=0;entryDy=0;"
+          edge="1" source="6" target="10" parent="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
 

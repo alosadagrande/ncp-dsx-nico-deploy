@@ -4,7 +4,7 @@
 
 - **NICo site controller**: SNO OpenShift on `control-plane-3`
 - **Targets**: `compute-tray-6` and `compute-tray-7` (bare-metal provisioned by NICo)
-- **Goal**: Isolated provisioning and workload networks, leaving the shared fabric untouched
+- **Goal**: Isolated provisioning network for tray-6/7 boot; after provisioning the ports are moved back to the existing north-south fabric (172.16.3.x)
 
 ---
 
@@ -13,15 +13,15 @@
 | VLAN | Name | Subnet | Purpose |
 |------|------|--------|---------|
 | **210** | NICo Provisioning | `172.16.10.0/24` | DHCP, PXE, DNS — tray-6/7 boot |
-| **211** | NICo BMC Isolated | `172.16.11.0/24` | Isolated BMC for tray-6/7 only |
-| **212** | NICo Workload | `172.16.12.0/24` | Post-provision tenant data plane |
+
+After provisioning completes, tray switch ports move back to the existing north-south VLAN (172.16.3.x) — no new workload VLAN is created.
 
 Existing networks are **not modified**:
 
 | Existing | Subnet | Shared by |
 |----------|--------|-----------|
 | OOB/Management | `172.16.0.x/24` | All BMCs, switches |
-| Host Management | `172.16.2.x/24` | All 13 control-plane nodes, all 18 tray OOBs |
+| Host Management | `172.16.2.x/24` | All 13 control-plane nodes, all 18 tray OOBs, tray-6/7 BMCs |
 | North-South | `172.16.3.x/24` | All hosts data plane |
 | Storage LACP | `172.16.5.x/24` | All storage traffic |
 | NVLink Management | VLAN 200 | NVLink switches |
@@ -41,33 +41,6 @@ Existing networks are **not modified**:
 | `172.16.10.102` | DHCP reservation — tray-7 boot (MAC `e0:9d:73:86:d4:52`) |
 | `172.16.10.128–254` | DHCP pool (dynamic, for iPXE stages) |
 
-### VLAN 211 — NICo BMC Isolated (`172.16.11.0/24`)
-
-| IP | Role |
-|----|------|
-| `172.16.11.1` | L3 gateway — SVI on sn2201dc-mgmt-sw-01/02 (see note below) |
-| `172.16.11.2` | control-plane-3 subinterface (`bond-ns.211`) |
-| `172.16.11.6` | tray-6 AMI MegaRAC BMC (static, re-assigned from `172.16.2.66`) |
-| `172.16.11.7` | tray-7 AMI MegaRAC BMC (static, re-assigned from `172.16.2.67`) |
-| `172.16.11.16` | tray-6 DPU BlueField OpenBMC (static) |
-| `172.16.11.17` | tray-7 DPU BlueField OpenBMC (static) |
-| `172.16.11.26` | tray-6 host OOB (`oob_net0`) |
-| `172.16.11.27` | tray-7 host OOB (`oob_net0`) |
-
-> **Note**: The uplink ports from `sn2201dc-mgmt-sw-01/02` to the main fabric are not documented in
-> the saved LaunchPad pages. Verify these uplinks before configuring VLAN 211 routing. If the
-> sn2201dc switches do not connect to the sn5600-csl fabric, an alternative is to route VLAN 211
-> via the sn2201-mg switches and control-plane-3's management bond.
-
-### VLAN 212 — NICo Workload (`172.16.12.0/24`)
-
-| IP | Role |
-|----|------|
-| `172.16.12.1` | L3 gateway — SVI on sn5600-csl-01/02 |
-| `172.16.12.6` | tray-6 provisioned OS address |
-| `172.16.12.7` | tray-7 provisioned OS address |
-| `172.16.12.0/24` | Full tenant address pool (NICo manages allocation) |
-
 ---
 
 ## DNS and Subdomains
@@ -83,8 +56,8 @@ NICo's DNS service runs at the MetalLB VIP `172.16.10.10:53` and is authoritativ
 | `nico-api.nico-site.launchpad.local` | A | `172.16.10.10` | NICo gRPC API (MetalLB VIP) |
 | `compute-tray-6.nico-site.launchpad.local` | A | `172.16.10.101` | Tray-6 during provisioning |
 | `compute-tray-7.nico-site.launchpad.local` | A | `172.16.10.102` | Tray-7 during provisioning |
-| `compute-tray-6.workload.nico-site.launchpad.local` | A | `172.16.12.6` | Tray-6 post-provision |
-| `compute-tray-7.workload.nico-site.launchpad.local` | A | `172.16.12.7` | Tray-7 post-provision |
+| `compute-tray-6.nico-site.launchpad.local` | A | assigned via 172.16.3.x | Tray-6 post-provision (north-south fabric) |
+| `compute-tray-7.nico-site.launchpad.local` | A | assigned via 172.16.3.x | Tray-7 post-provision (north-south fabric) |
 
 ---
 
@@ -114,15 +87,13 @@ Single L2 VIP on VLAN 210, announced from `bond-ns.210` on control-plane-3. NICo
 These are the collapsed spine-leaf switches. All three nodes (SNO, tray-6, tray-7) connect here.
 
 ```bash
-# Add new VLANs to the bridge
+# Add VLAN 210 to the bridge
 nv set bridge domain br_default vlan 210
-nv set bridge domain br_default vlan 212
 
-# Trunk VLANs 210 and 212 on control-plane-3 uplink
+# Trunk VLAN 210 on control-plane-3 uplink
 # csl-01: swp16s1 (ens3f0np0, MAC 8c:91:3a:c8:1b:7a)
 # csl-02: swp16s1 (ens3f1np1, MAC 8c:91:3a:c8:1b:7b)
 nv set interface swp16s1 bridge domain br_default vlan 210
-nv set interface swp16s1 bridge domain br_default vlan 212
 
 # Access VLAN 210 on tray-6 provisioning uplink
 # csl-01: swp3s1 (DPU B3420 p0, MAC e0:9d:73:87:03:70)
@@ -134,66 +105,15 @@ nv set interface swp3s1 bridge domain br_default access 210
 # csl-02: swp4s0 (DPU B3420 p1, MAC e0:9d:73:86:d4:53)
 nv set interface swp4s0 bridge domain br_default access 210
 
-# L3 SVIs (configure on both csl-01 and csl-02 with MLAG/VRR for HA)
+# L3 SVI for provisioning (configure on both csl-01 and csl-02 with MLAG/VRR for HA)
 nv set interface vlan210 ip address 172.16.10.1/24
-nv set interface vlan212 ip address 172.16.12.1/24
 
-nv config apply
+nv config apply --timeout 120
 ```
 
-> **After provisioning**: Move swp3s1 and swp4s0 from VLAN 210 to VLAN 212 to put the
-> provisioned OS on the workload network. NICo's workflow should automate this transition.
-
-### sn2201dc-mgmt-sw-01 — Cumulus Linux (NVUE)
-
-> OOB management IP: `172.16.0.14`
-
-Carries tray-6 and tray-7 AMI MegaRAC BMC ports.
-
-```bash
-# Add VLAN 211 and isolate tray-6 + tray-7 BMC ports
-nv set bridge domain br_default vlan 211
-
-# swp34 → tray-6 BMC (MAC 18:3d:2d:9b:b3:f4)
-nv set interface swp34 bridge domain br_default access 211
-
-# swp35 → tray-7 BMC (MAC 18:3d:2d:9b:b4:12)
-nv set interface swp35 bridge domain br_default access 211
-
-# SVI (if this switch does L3; otherwise configure on upstream switch)
-nv set interface vlan211 ip address 172.16.11.1/24
-
-nv config apply
-```
-
-### sn2201dc-mgmt-sw-02 — Cumulus Linux (NVUE)
-
-> OOB management IP: `172.16.0.15`
-
-Carries tray-6 and tray-7 DPU BMC, DPU host OOB, and host OOB ports.
-
-```bash
-nv set bridge domain br_default vlan 211
-
-# swp34 → tray-6 DPU BMC (MAC e0:9d:73:87:03:85) + DPU host OOB (MAC e0:9d:73:87:03:84)
-nv set interface swp34 bridge domain br_default access 211
-
-# swp35 → tray-7 DPU BMC (MAC e0:9d:73:86:d4:67) + DPU host OOB (MAC e0:9d:73:86:d4:66)
-nv set interface swp35 bridge domain br_default access 211
-
-# swp6 → tray-6 host OOB bond (MAC c4:ef:bb:1b:09:0c)
-nv set interface swp6 bridge domain br_default access 211
-
-# swp7 → tray-7 host OOB bond (MAC c4:ef:bb:1b:09:08)
-nv set interface swp7 bridge domain br_default access 211
-
-nv config apply
-```
-
-> **Action required**: Before applying VLAN 211 on these switches, identify the uplink ports from
-> sn2201dc-mgmt-sw-01/02 to the fabric and add VLAN 211 to those trunks. Also reconfigure the
-> BMC IPs on both trays from their current `172.16.2.x` addresses to the new `172.16.11.x` addresses
-> via the current BMC web UI before moving the switch ports.
+> **After provisioning**: Remove VLAN 210 access from swp3s1 and swp4s0, then set them to the
+> existing north-south VLAN (172.16.3.x). The trays join the shared fabric alongside all other hosts.
+> NICo's workflow should automate this transition.
 
 ---
 
@@ -219,32 +139,36 @@ interfaces:
           prefix-length: 24
       dhcp: false
 
-  - name: bond-ns.211
-    type: vlan
-    state: up
-    vlan:
-      base-iface: bond-ns
-      id: 211
-    ipv4:
-      enabled: true
-      address:
-        - ip: 172.16.11.2
-          prefix-length: 24
-      dhcp: false
-
-  - name: bond-ns.212
-    type: vlan
-    state: up
-    vlan:
-      base-iface: bond-ns
-      id: 212
-    ipv4:
-      enabled: true
-      address:
-        - ip: 172.16.12.2
-          prefix-length: 24
-      dhcp: false
 ```
+
+---
+
+## OVN-Kubernetes Prerequisite — Local Gateway Mode
+
+MetalLB L2 mode requires the host network stack to handle ARP for the VIP. OVN-Kubernetes' default **shared-gateway** mode intercepts that traffic through the logical router before it reaches the host, so MetalLB VIPs will be unreachable without this change.
+
+**Apply before installing MetalLB.** This is a cluster-wide change that causes a brief (~30–60s) network disruption — plan a maintenance window.
+
+```yaml
+apiVersion: operator.openshift.io/v1
+kind: Network
+metadata:
+  name: cluster
+spec:
+  defaultNetwork:
+    ovnKubernetesConfig:
+      gatewayConfig:
+        routingViaHost: true
+```
+
+Wait for all OVN pods to restart and the node to return `Ready` before proceeding:
+
+```bash
+oc get network.operator cluster -o jsonpath='{.spec.defaultNetwork.ovnKubernetesConfig.gatewayConfig}'
+oc get nodes
+```
+
+> On SNO the disruption risk is lower than multi-node (single node, no inter-node traffic), but SSH sessions and `oc` commands will drop briefly.
 
 ---
 
@@ -282,16 +206,15 @@ spec:
                         │   (collapsed spine-leaf, Cumulus Linux)  │
                         │                                          │
                         │  swp16s1 ── control-plane-3              │
-                        │            trunk: existing + VLAN 210,212│
+                        │            trunk: existing + VLAN 210    │
                         │                                          │
                         │  swp3s1  ── compute-tray-6 DPU p0/p1    │
-                        │            access: VLAN 210 (→212 later) │
+                        │            access: VLAN 210 (→N-S later) │
                         │                                          │
                         │  swp4s0  ── compute-tray-7 DPU p0/p1    │
-                        │            access: VLAN 210 (→212 later) │
+                        │            access: VLAN 210 (→N-S later) │
                         │                                          │
                         │  SVI vlan210: 172.16.10.1/24            │
-                        │  SVI vlan212: 172.16.12.1/24            │
                         └──────────────────────────────────────────┘
 
    ┌────────────────────────────────────┐
@@ -299,8 +222,6 @@ spec:
    │                                    │
    │  bond-ns       → 172.16.2.123     │  (Host Management — actual node IP)
    │  bond-ns.210   → 172.16.10.2/24   │  NICo provisioning
-   │  bond-ns.211   → 172.16.11.2/24   │  BMC management
-   │  bond-ns.212   → 172.16.12.2/24   │  workload
    │                                    │
    │  MetalLB L2 VIP: 172.16.10.10     │
    │  ├─ DHCP     :67/68               │
@@ -320,16 +241,9 @@ spec:
    └─────────────────────────┘    └─────────────────────────┘
 
                         ┌──────────────────────────────────────────┐
-                        │   sn2201dc-mgmt-sw-01                    │
-                        │   swp34 → tray-6 BMC  — VLAN 211        │
-                        │   swp35 → tray-7 BMC  — VLAN 211        │
-                        ├──────────────────────────────────────────┤
-                        │   sn2201dc-mgmt-sw-02                    │
-                        │   swp34 → tray-6 DPU BMC + OOB VLAN 211 │
-                        │   swp35 → tray-7 DPU BMC + OOB VLAN 211 │
-                        │   swp6  → tray-6 host OOB  — VLAN 211   │
-                        │   swp7  → tray-7 host OOB  — VLAN 211   │
-                        │   SVI vlan211: 172.16.11.1/24            │
+                        │   sn2201dc-mgmt-sw-01/02 (unchanged)     │
+                        │   tray-6/7 BMCs remain on 172.16.2.x     │
+                        │   NICo accesses via bond-ns (172.16.2.123)│
                         └──────────────────────────────────────────┘
 ```
 
@@ -398,26 +312,21 @@ nv config save
 
 ## Action Checklist
 
-### Before touching switches
-
-- [ ] Identify uplink ports from `sn2201dc-mgmt-sw-01/02` to the fabric (not documented in LaunchPad pages)
-- [ ] Record current BMC IPs for tray-6 and tray-7 from `172.16.2.x` range
-- [ ] Reconfigure tray-6/7 BMC IPs to `172.16.11.x` via the current BMC web UI **before** moving switch ports
-
 ### Switch changes
 
-- [ ] Add VLAN 210, 212 + SVIs on `sn5600-csl-01`
-- [ ] Add VLAN 210, 212 + SVIs on `sn5600-csl-02`
-- [ ] Trunk VLAN 210, 212 on swp16s1 (both CSL switches)
+- [ ] Add VLAN 210 + SVI on `sn5600-csl-01`
+- [ ] Add VLAN 210 + SVI on `sn5600-csl-02`
+- [ ] Trunk VLAN 210 on swp16s1 (both CSL switches)
 - [ ] Access VLAN 210 on swp3s1 (tray-6 uplink on both CSL switches)
 - [ ] Access VLAN 210 on swp4s0 (tray-7 uplink on both CSL switches)
-- [ ] Add VLAN 211 on `sn2201dc-mgmt-sw-01` swp34, swp35
-- [ ] Add VLAN 211 on `sn2201dc-mgmt-sw-02` swp34, swp35, swp6, swp7
-- [ ] Trunk VLAN 211 on sn2201dc uplink ports toward fabric
+
+> sn2201dc-mgmt-sw-01/02 require no changes — tray-6/7 BMCs stay on their existing `172.16.2.x` addresses.
 
 ### SNO / OpenShift
 
-- [ ] Apply NMState config for bond-ns.210, .211, .212 on control-plane-3
+- [ ] Apply NMState config for bond-ns.210 on control-plane-3
+- [ ] **Patch OVN to local-gateway mode** (`routingViaHost: true`) — brief network blip; apply before MetalLB
+- [ ] Wait for OVN pods to restart and node to return `Ready`
 - [ ] Install MetalLB operator via OLM
 - [ ] Apply `IPAddressPool` + `L2Advertisement` for `172.16.10.10` on `bond-ns.210`
 - [ ] Apply upstream kustomize patches (DNS targetPort 5353, SSH targetPort 2222)
@@ -428,6 +337,6 @@ nv config save
 - [ ] Register site with NICo REST cloud (site agent)
 - [ ] Configure DHCP reservations for tray-6 (MAC `e0:9d:73:87:03:70` → `172.16.10.101`)
 - [ ] Configure DHCP reservations for tray-7 (MAC `e0:9d:73:86:d4:52` → `172.16.10.102`)
-- [ ] Set BMC credentials for tray-6 (`172.16.11.6`, `172.16.11.16`) and tray-7 (`172.16.11.7`, `172.16.11.17`)
+- [ ] Set BMC credentials for tray-6 (`172.16.2.66`) and tray-7 (`172.16.2.67`)
 - [ ] Trigger provisioning workflow for tray-6 and tray-7
-- [ ] After provisioning: move swp3s1/swp4s0 from VLAN 210 to VLAN 212 (workload network)
+- [ ] After provisioning: move swp3s1/swp4s0 from VLAN 210 access to north-south VLAN (172.16.3.x)
