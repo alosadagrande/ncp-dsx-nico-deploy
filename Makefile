@@ -415,6 +415,7 @@ deploy-site-infra: helm-dep-build
 	@echo "=== Vault topology: $(VAULT_MODE) (detected $(NODE_COUNT) schedulable node(s)) ==="
 	helm upgrade --install -n nico-system nico-site-infra \
 		helm/infra-site/ \
+		-f helm/values/infra-site.yaml \
 		--create-namespace --timeout 15m \
 		$(VAULT_OVERRIDES)
 

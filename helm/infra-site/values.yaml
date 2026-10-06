@@ -2,6 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # =============================================================================
+# MetalLB — L2 address pool for NICo LoadBalancer services
+#
+# The operator is installed by the prereqs chart (OLM Subscription).
+# This section creates the MetalLB operand, IPAddressPool and L2Advertisement.
+# Addresses must cover the VIPs used in nico-core.yaml externalService
+# annotations (nico-api, nico-pxe, unbound).
+# =============================================================================
+metallb:
+  enabled: false
+  namespace: metallb-system
+  poolName: nico-vips
+  addresses: []
+
+# =============================================================================
 # Vault — BMC credential storage for Core tier
 #
 # Production: HA Raft (3 replicas) with TLS.

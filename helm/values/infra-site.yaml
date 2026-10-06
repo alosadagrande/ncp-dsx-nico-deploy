@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Red Hat, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# =============================================================================
+# Site-specific overrides for infra-site chart.
+#
+# MetalLB L2 address pool for NICo services.
+# Addresses must cover the VIPs in helm/values/nico-core.yaml:
+#   172.16.2.12 — nico-pxe
+#   172.16.2.13 — unbound (nico-dns)
+#   172.16.2.14 — nico-api
+# =============================================================================
+
+metallb:
+  enabled: true
+  addresses:
+    - "172.16.2.12-172.16.2.19"

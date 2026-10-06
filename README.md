@@ -82,8 +82,9 @@ patch before any deploy (wired into `helm-dep-build` and `deploy-site`; see
 
 ### 1. Operators and ClusterIssuers
 
-Installs cert-manager, Crunchy PGO, RHBK, and ESO operators via OLM.
-Creates the self-signed CA chain and ClusterIssuers.
+Installs cert-manager, Crunchy PGO, RHBK, ESO, and MetalLB operators via OLM.
+Creates the self-signed CA chain and ClusterIssuers. A post-install job waits
+for all operator CRDs to be available before the release completes.
 
 ```bash
 make deploy-prereqs
@@ -131,8 +132,14 @@ The org name (`ncx`) is derived from the Keycloak realm role prefix
 
 ### 4. Site Infrastructure
 
-Deploys PostgreSQL (nico, flow, psm, nsm databases), Vault, NATS, and ESO
-secrets.
+Deploys MetalLB operand + IPAddressPool + L2Advertisement, PostgreSQL (nico,
+flow, psm, nsm databases), Vault, NATS, and ESO secrets.
+
+MetalLB configuration is site-specific: the VIP address range lives in
+`helm/values/infra-site.yaml` and must cover the MetalLB VIPs referenced by
+`nico-core.yaml` (nico-api, nico-pxe, unbound `externalService` annotations).
+The operator itself is installed by `deploy-prereqs` (step 1); this step
+creates the operand and L2 pool.
 
 ```bash
 make deploy-site-infra
@@ -257,7 +264,7 @@ helm/
   vendor/infra-controller/           Upstream (git submodule, read-only)
   values/                            Values overrides for upstream charts
   infra-cloud/                       Red Hat add-ons: Crunchy PG, Keycloak, Temporal, Routes, ESO
-  infra-site/                        Red Hat add-ons: Vault HA, PG, NATS, ESO
+  infra-site/                        Red Hat add-ons: MetalLB config, Vault HA, PG, NATS, ESO
   kustomize/                         Patches for upstream templates (SCC, Crunchy keys)
   nvidia-infra-controller-prereqs/   OLM operator subscriptions
 ```
@@ -267,6 +274,7 @@ helm/
 | `nico-rest` | REST API, Temporal, PG (cloud), Keycloak Routes |
 | `nico-system` | Core services, site-agent, Flow, Vault HA, PG (site), NATS |
 | `rhbk-operator` | Keycloak (RHBK operator) |
+| `metallb-system` | MetalLB operator, IPAddressPool, L2Advertisement |
 
 ### Vault
 

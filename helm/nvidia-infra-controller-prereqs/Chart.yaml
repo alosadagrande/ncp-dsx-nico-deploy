@@ -5,8 +5,9 @@ apiVersion: v2
 name: nvidia-infra-controller-prereqs
 description: >-
   Prerequisite operators and ClusterIssuers for NVIDIA Infra Controller.
-  Installs cert-manager, Crunchy PostgreSQL, and RHBK operators via OLM,
-  then creates CA-based ClusterIssuers for mTLS and a Keycloak instance.
+  Installs cert-manager, Crunchy PostgreSQL, RHBK, MetalLB, and ESO operators
+  via OLM, then creates CA-based ClusterIssuers for mTLS, a Keycloak instance,
+  and MetalLB L2 address pools.
 type: application
 version: 0.1.0
 appVersion: "1.6.0"

@@ -62,6 +62,11 @@ nico-system namespace (per-site, edge — upstream nico + site-agent charts)
 ├── Vault HA (3-node Raft)           ← infra-site
 ├── nico-site-pg (Crunchy PG15)      ← infra-site (nico, flow, psm, nsm DBs)
 └── ESO ExternalSecrets              ← infra-site
+
+metallb-system namespace (L2 load balancer for bare-metal VIPs)
+├── MetalLB operator                 ← prereqs (OLM Subscription)
+├── IPAddressPool (nico-vips)        ← infra-site
+└── L2Advertisement                  ← infra-site
 ```
 
 ### TLS Architecture
@@ -96,6 +101,7 @@ nico-bootstrap-issuer (self-signed)
 | Crunchy PostgreSQL | `certified-operators` | Managed PostgreSQL clusters |
 | RHBK (Keycloak) | `redhat-operators` | Identity and access management |
 | External Secrets Operator | `redhat-operators` | Cross-namespace secret sync |
+| MetalLB | `redhat-operators` | L2/BGP load balancer for bare-metal VIPs |
 
 ## Directory Structure
 
@@ -109,6 +115,7 @@ helm/
     nico-core.yaml                     Core tier (all services enabled)
     nico-core-mat.yaml                 machine-a-tron TEST overlay (RBAC bypass, emulator net) — MAT=1 only
     nico-rest-site-agent.yaml          Site-agent (Temporal client)
+    infra-site.yaml                    Site infra overrides (MetalLB VIP pool)
   infra-cloud/                       Red Hat cloud infrastructure add-ons
     Chart.yaml                         Depends on: Temporal chart
     templates/
@@ -126,6 +133,7 @@ helm/
       site-issuer.yaml                 site-issuer ClusterIssuer
       eso-external-secrets.yaml        nico-roots CA sync via ESO
       core-stubs.yaml                  AppRole placeholder secret
+      metallb-config.yaml              MetalLB operand + IPAddressPool + L2Advertisement
   kustomize/
     nico-rest/                       Patches for upstream nico-rest chart
       patches/                         DB migration, Keycloak wait, CA trust, SCC
