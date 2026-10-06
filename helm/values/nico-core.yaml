@@ -139,6 +139,10 @@ nico-dhcp:
         - subnet: "0.0.0.0/0"
           pools:
             - "0.0.0.0-255.255.255.255"
+  externalService:
+    enabled: true
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "172.16.2.15"
 nico-dns:
   enabled: true
   replicas: 1
