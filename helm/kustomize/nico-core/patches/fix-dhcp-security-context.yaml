@@ -5,10 +5,19 @@
 # /var/run/kea and /var/lib/kea — image isn't built for OpenShift's
 # arbitrary UID, so the chart's own `mkdir -p` isn't enough.
 #
-# NET_BIND_SERVICE (for :67) is requested but doesn't actually take
-# effect — this cluster's runtime doesn't propagate it to the ambient
-# set for non-root exec. Harmless: DHCP is simulated via API here, not
-# real UDP (see nico-core.yaml's nico-dhcp comment).
+# REAL-HARDWARE DHCP: Kea must bind UDP/67 (privileged port). Adding
+# NET_BIND_SERVICE alone does NOT work on this cluster — the runtime
+# doesn't propagate it to the ambient set for non-root exec (CapBnd has
+# it, CapEff doesn't), so bind(67) fails with EACCES and the server
+# opens no sockets (DHCPSRV_NO_SOCKETS_OPEN). This was tolerated while
+# DHCP was API-simulated (MAT); for real relayed UDP it is a hard
+# blocker. Fix: run as root (runAsUser: 0) — matches the DPU-path chart
+# bluefield/charts/nico-dhcp-server (runAsUser: 0). As root the bind is
+# allowed without juggling ambient caps. `add: []` strips the chart's
+# SYS_PTRACE so the pod is admissible under the anyuid SCC.
+#
+# REQUIRES granting the anyuid SCC to the nico-dhcp ServiceAccount:
+#   oc adm policy add-scc-to-user anyuid -z nico-dhcp -n nico-system
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,9 +28,9 @@ spec:
       containers:
         - name: nico-dhcp
           securityContext:
+            runAsUser: 0
             capabilities:
-              add:
-                - NET_BIND_SERVICE
+              add: []
           volumeMounts:
             - name: kea-run
               mountPath: /var/run/kea
