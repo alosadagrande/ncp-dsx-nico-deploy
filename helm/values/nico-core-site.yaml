@@ -50,12 +50,21 @@ nico-api:
       reserve_first = 0
 
       # Host inband network. FLAT
+      # allocation_strategy = "reserved": DHCP only answers MACs with an
+      # existing reservation (expected-machine interfaces), never hands out
+      # dynamic leases. Deterministic for PXE and avoids colliding with the
+      # bastion dnsmasq on this shared /24. Default would be "dynamic".
+      # NOTE: only applied when the segment is first seeded — reconcile warns
+      # but does NOT update an already-seeded segment (network_segment.rs
+      # reconcile_network_defs: drift => warn). To flip an existing segment,
+      # delete it (nico-admin-cli network-segment delete) and re-seed.
       [networks.nvl72-inband]
       type = "hostinband"
       prefix = "172.16.2.0/24"
       gateway = "172.16.2.1"
       mtu = 1500
       reserve_first = 5
+      allocation_strategy = "reserved"
 
       [pools.lo-ip]
       type = "ipv4"
