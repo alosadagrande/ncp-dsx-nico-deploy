@@ -32,7 +32,7 @@ nico-api:
       dpu_policy = "ignore"
 
       # Underlay DPU provisioning compute-tray network
-      #[networks.bmc]
+      #[networks.nvl72-underlay]
       #type = "underlay"
       #prefix = "172.16.2.0/24"
       #gateway = "172.16.2.1"
@@ -42,10 +42,10 @@ nico-api:
       # Placeholder admin segment — required by DB constraint
       # (network_segment::admin() fails if none exist), but unused
       # without DPUs. Uses a dummy prefix with no real connectivity.
-      [networks.admin]
+      [networks.nvl72-admin]
       type = "admin"
-      prefix = "192.168.255.0/24"
-      gateway = "192.168.255.1"
+      prefix = "10.180.64.0/24"
+      gateway = "10.180.64.1"
       mtu = 1500
       reserve_first = 0
 
