@@ -14,7 +14,7 @@ global:
     # already had a stale `latest` cached on cluster nodes from an unrelated
     # build, and IfNotPresent kept serving it after a new push under the same tag.
     repository: quay.io/alosadag/nico
-    tag: "20261005"
+    tag: "20261007-fix-i210-amd64"
     pullPolicy: IfNotPresent
   spiffe:
     trustDomain: nico.local
