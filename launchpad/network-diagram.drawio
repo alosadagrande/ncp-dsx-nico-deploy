@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026 Red Hat, Inc. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
 <mxfile host="app.diagrams.net" modified="2026-10-04T00:00:00.000Z" version="21.0.0">
   <diagram id="nico-net-diag" name="NICo Site Network">
     <mxGraphModel dx="1000" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
@@ -15,10 +19,10 @@
 
         <!-- CSL Switches -->
         <mxCell id="3"
-          value="&lt;b style=&quot;font-size:13px;&quot;&gt;sn5600-csl-01 / sn5600-csl-02&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#93C5FD;&quot;&gt;Collapsed Spine-Leaf · Cumulus Linux (NVUE)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#6B7280;&quot;&gt;OOB: 172.16.0.10 (csl-01) · 172.16.0.11 (csl-02)&lt;/span&gt;"
+          value="&lt;b style=&quot;font-size:13px;&quot;&gt;sn5600-csl-01 / sn5600-csl-02&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#93C5FD;&quot;&gt;Collapsed Spine-Leaf · Cumulus Linux (NVUE)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px;color:#6B7280;&quot;&gt;OOB: 172.16.0.10 (csl-01) · 172.16.0.11 (csl-02)&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px;color:#60A5FA;&quot;&gt;VRR vlan210: 172.16.10.1/24 (virtual · MAC 00:00:5e:00:01:0a) · csl-01: 172.16.10.252 · csl-02: 172.16.10.253&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E3A5F;strokeColor=#3B82F6;strokeWidth=2;fontColor=white;verticalAlign=top;spacingTop=10;"
           vertex="1" parent="1">
-          <mxGeometry x="220" y="48" width="460" height="90" as="geometry" />
+          <mxGeometry x="220" y="48" width="460" height="105" as="geometry" />
         </mxCell>
 
         <!-- CSL port label - SNO trunk -->
@@ -26,7 +30,7 @@
           value="swp16s1&lt;br&gt;&lt;span style=&quot;color:#93C5FD;&quot;&gt;SNO trunk · VLAN 210&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1E40AF;strokeColor=none;fontColor=#BFDBFE;fontSize=8;opacity=60;"
           vertex="1" parent="1">
-          <mxGeometry x="265" y="101" width="130" height="26" as="geometry" />
+          <mxGeometry x="265" y="116" width="130" height="26" as="geometry" />
         </mxCell>
 
         <!-- CSL port label - tray uplinks -->
@@ -34,7 +38,7 @@
           value="swp3s1 (tray-6)&lt;br&gt;&lt;span style=&quot;color:#86EFAC;&quot;&gt;swp4s0 (tray-7) · VLAN 210 → N-S after provision&lt;/span&gt;"
           style="rounded=1;whiteSpace=wrap;html=1;fillColor=#166534;strokeColor=none;fontColor=#86EFAC;fontSize=8;opacity=60;"
           vertex="1" parent="1">
-          <mxGeometry x="505" y="101" width="130" height="26" as="geometry" />
+          <mxGeometry x="505" y="116" width="130" height="26" as="geometry" />
         </mxCell>
 
         <!-- control-plane-3 / SNO -->

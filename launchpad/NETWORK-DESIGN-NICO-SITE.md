@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2026 Red Hat, Inc. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # NICo Site Network Design — control-plane-3 + tray-6 + tray-7
 
 ## Scope
@@ -34,7 +39,9 @@ Existing networks are **not modified**:
 
 | IP | Role |
 |----|------|
-| `172.16.10.1` | L3 gateway — SVI on sn5600-csl-01/02 |
+| `172.16.10.1` | L3 virtual gateway — VRR address on sn5600-csl-01/02 (shared VRR MAC `00:00:5e:00:01:0a`) |
+| `172.16.10.252` | Physical SVI — sn5600-csl-01 |
+| `172.16.10.253` | Physical SVI — sn5600-csl-02 |
 | `172.16.10.2` | control-plane-3 subinterface (`bond-ns.210`) |
 | **`172.16.10.10`** | **MetalLB VIP** — all NICo site services |
 | `172.16.10.101` | DHCP reservation — tray-6 boot (MAC `e0:9d:73:87:03:70`) |
@@ -105,8 +112,21 @@ nv set interface swp3s1 bridge domain br_default access 210
 # csl-02: swp4s0 (DPU B3420 p1, MAC e0:9d:73:86:d4:53)
 nv set interface swp4s0 bridge domain br_default access 210
 
-# L3 SVI for provisioning (configure on both csl-01 and csl-02 with MLAG/VRR for HA)
-nv set interface vlan210 ip address 172.16.10.1/24
+# L3 SVI for provisioning — VRR (Virtual Router Redundancy) for HA
+# Each switch gets a unique physical address; 172.16.10.1 is the shared virtual gateway.
+# The VRR MAC (00:00:5e:00:01:0a) is identical on both switches so ARP is consistent.
+
+# --- on sn5600-csl-01 only ---
+nv set interface vlan210 ip address 172.16.10.252/24
+nv set interface vlan210 ip vrr address 172.16.10.1/24
+nv set interface vlan210 ip vrr mac-address 00:00:5e:00:01:0a
+nv set interface vlan210 ip vrr state up
+
+# --- on sn5600-csl-02 only ---
+nv set interface vlan210 ip address 172.16.10.253/24
+nv set interface vlan210 ip vrr address 172.16.10.1/24
+nv set interface vlan210 ip vrr mac-address 00:00:5e:00:01:0a
+nv set interface vlan210 ip vrr state up
 
 nv config apply --timeout 120
 ```
@@ -121,24 +141,39 @@ nv config apply --timeout 120
 
 The north-south bond (`bond-ns`) is the LACP bond of `ens3f0np0` + `ens3f1np1`, already carrying `172.16.3.x` traffic. Add tagged subinterfaces for the new VLANs.
 
-For OpenShift/SNO, configure via NMState (apply as a `MachineConfig` or at install time via the `install-config.yaml` network section):
+For OpenShift/SNO, apply a `NodeNetworkConfigurationPolicy` (NNCP) targeting `control-plane-3` by hostname:
 
 ```yaml
-# NMState for control-plane-3
-interfaces:
-  - name: bond-ns.210
-    type: vlan
-    state: up
-    vlan:
-      base-iface: bond-ns
-      id: 210
-    ipv4:
-      enabled: true
-      address:
-        - ip: 172.16.10.2
-          prefix-length: 24
-      dhcp: false
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: nico-provisioning-vlan210
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: control-plane-3
+  desiredState:
+    interfaces:
+      - name: bond-ns.210
+        type: vlan
+        state: up
+        vlan:
+          base-iface: bond-ns
+          id: 210
+        ipv4:
+          enabled: true
+          address:
+            - ip: 172.16.10.2
+              prefix-length: 24
+          dhcp: false
+```
 
+Apply and verify:
+
+```bash
+oc apply -f nico-provisioning-vlan210-nncp.yaml
+oc get nncp nico-provisioning-vlan210 -w
+# Wait for: Available
+oc get nncpe -l nmstate.io/policy=nico-provisioning-vlan210
 ```
 
 ---
@@ -214,7 +249,9 @@ spec:
                         │  swp4s0  ── compute-tray-7 DPU p0/p1    │
                         │            access: VLAN 210 (→N-S later) │
                         │                                          │
-                        │  SVI vlan210: 172.16.10.1/24            │
+                        │  VRR vlan210: 172.16.10.1/24 (virtual)  │
+                        │  csl-01 SVI:  172.16.10.252/24          │
+                        │  csl-02 SVI:  172.16.10.253/24          │
                         └──────────────────────────────────────────┘
 
    ┌────────────────────────────────────┐
@@ -324,7 +361,7 @@ nv config save
 
 ### SNO / OpenShift
 
-- [ ] Apply NMState config for bond-ns.210 on control-plane-3
+- [ ] Apply `NodeNetworkConfigurationPolicy` `nico-provisioning-vlan210` for bond-ns.210 on control-plane-3
 - [ ] **Patch OVN to local-gateway mode** (`routingViaHost: true`) — brief network blip; apply before MetalLB
 - [ ] Wait for OVN pods to restart and node to return `Ready`
 - [ ] Install MetalLB operator via OLM

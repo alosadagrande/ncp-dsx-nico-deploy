@@ -66,11 +66,16 @@ spec:
               TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
               API=https://kubernetes.default.svc
               CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              HDRFILE=$(mktemp)
+              chmod 600 "$HDRFILE"
+              printf 'Authorization: Bearer %s\n' "$TOKEN" > "$HDRFILE"
+              trap 'rm -f "$HDRFILE"' EXIT
+              unset TOKEN
 
               wait_crd() {
                 echo "Waiting for CRD $1..."
                 until curl -sf --cacert "$CA" \
-                    -H "Authorization: Bearer $TOKEN" \
+                    -H @"$HDRFILE" \
                     "$API/apis/apiextensions.k8s.io/v1/customresourcedefinitions/$1" \
                     >/dev/null 2>&1; do
                   sleep 5
@@ -80,7 +85,7 @@ spec:
 
               sa() {
                 curl -sf --cacert "$CA" \
-                  -H "Authorization: Bearer $TOKEN" \
+                  -H @"$HDRFILE" \
                   -H "Content-Type: application/apply-patch+yaml" \
                   -X PATCH \
                   "$API$1?fieldManager=prereqs-hook&force=true" \
@@ -97,14 +102,14 @@ spec:
               wait_crd externalsecretsconfigs.operator.openshift.io
               echo "Waiting for ExternalSecretsConfig API endpoint to be ready..."
               until curl -sf --cacert "$CA" \
-                  -H "Authorization: Bearer $TOKEN" \
+                  -H @"$HDRFILE" \
                   "$API/apis/operator.openshift.io/v1alpha1/externalsecretsconfigs" \
                   >/dev/null 2>&1; do
                 sleep 5
               done
               echo "Creating ExternalSecretsConfig operand..."
               until curl -s --cacert "$CA" \
-                  -H "Authorization: Bearer $TOKEN" \
+                  -H @"$HDRFILE" \
                   -H "Content-Type: application/json" \
                   -X POST \
                   "$API/apis/operator.openshift.io/v1alpha1/externalsecretsconfigs" \
