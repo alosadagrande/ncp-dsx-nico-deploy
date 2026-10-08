@@ -4,9 +4,11 @@
 .PHONY: check-prereqs bootstrap-cluster bootstrap-clean patch-vendor
 .PHONY: docker-build-ubi docker-push-ubi docker-build-core docker-push-core docker-build-nicocli docker-push-nicocli helm-dep-build helm-lint helm-template
 .PHONY: build-machine-a-tron bootstrap-machine-a-tron machine-a-tron-status
+.PHONY: deploy-all-sites new-site
 .PHONY: deploy-prereqs deploy-cloud-infra deploy-cloud
 .PHONY: deploy-site-infra vault-init vault-admin-cert ensure-ssh-host-key deploy-site deploy-site-agent
 .PHONY: deploy-all-cloud patch-keycloak-route bootstrap-org deploy-all-site status undeploy
+.PHONY: deploy-dataplane-vip verify-prereqs-deployed verify-infra-deployed verify-core-deployed verify-dataplane-vip
 .PHONY: reset-dpu-endpoint
 
 # Upstream source repo (git submodule, read-only)
@@ -38,9 +40,38 @@ MAT ?=
 # exits without resource pools, so a real deploy MUST supply them. Default is
 # the production overlay (pools/networks, no bypass); MAT=1 swaps to the
 # machine-a-tron overlay, which carries its own pools + emulator bypass flags.
-# Override with SITE_VALUES=<file> for a site-specific config.
-SITE_VALUES ?= helm/values/nico-core-site.yaml
+# Override with SITE_VALUES=<file>, or set SITE=<name> to auto-resolve all three
+# per-site override files: helm/values/{nico-core,prereqs,infra-site}-<SITE>.yaml.
+# SITE (and anything else) can live in a git-ignored deploy.env so the make
+# targets need no args. Command-line SITE=... still wins over deploy.env.
+-include deploy.env
+SITE ?=
+SITE_VALUES ?= $(if $(SITE),helm/values/nico-core-$(SITE).yaml,helm/values/nico-core-site.yaml)
+# Per-site overrides for the prereqs and infra-site charts (MetalLB operators /
+# operand). Empty (no SITE) = charts' neutral defaults, i.e. MetalLB stays off.
+PREREQS_VALUES ?= $(if $(SITE),helm/values/prereqs-$(SITE).yaml)
+SITE_INFRA_VALUES ?= $(if $(SITE),helm/values/infra-site-$(SITE).yaml)
 SITE_CONFIG_FLAG := $(if $(MAT),-f $(MAT_VALUES),-f $(SITE_VALUES))
+
+# Data-plane MetalLB shared VIP: all services (API, PXE, DNS, DHCP) on one IP,
+# different ports. When set, automatically enables MetalLB in prereqs and infra-site.
+# Resolve from numbered vars in deploy.env based on SITE (e.g., DATAPLANE_VIP_SITE1).
+toupper = $(shell echo $(1) | tr a-z A-Z)
+DATAPLANE_VIP     ?= $(DATAPLANE_VIP_$(call toupper,$(SITE)))
+DATAPLANE_POOL    ?= $(DATAPLANE_POOL_$(call toupper,$(SITE)))
+DATAPLANE_NIC     ?= $(DATAPLANE_NIC_$(call toupper,$(SITE)))
+DATAPLANE_NODE_IP ?= $(DATAPLANE_NODE_IP_$(call toupper,$(SITE)))
+# Annotation key (dots escaped for --set). All services use the same shared IP.
+MLB_ANN := externalService.annotations.metallb\.universe\.tf/loadBalancerIPs
+DATAPLANE_VIP_SET := \
+  $(if $(DATAPLANE_VIP),--set-string 'nico-api.$(MLB_ANN)=$(DATAPLANE_VIP)' --set-string 'nico-api.certificate.ipAddresses[0]=$(DATAPLANE_VIP)' --set-string 'nico-pxe.$(MLB_ANN)=$(DATAPLANE_VIP)' --set-string 'unbound.$(MLB_ANN)=$(DATAPLANE_VIP)' --set-string 'nico-dhcp.$(MLB_ANN)=$(DATAPLANE_VIP)' --set 'nico-api.externalService.annotations.metallb\.universe\.tf/allow-shared-ip=nico-site-vip' --set 'nico-pxe.externalService.annotations.metallb\.universe\.tf/allow-shared-ip=nico-site-vip' --set 'unbound.externalService.annotations.metallb\.universe\.tf/allow-shared-ip=nico-site-vip' --set 'nico-dhcp.externalService.annotations.metallb\.universe\.tf/allow-shared-ip=nico-site-vip' --set-string 'unbound.localData[0].addresses[0]=$(DATAPLANE_VIP)' --set-string 'unbound.localData[1].addresses[0]=$(DATAPLANE_VIP)' --set-string 'nico-dhcp.config.kea.hookParameters.nameservers=$(DATAPLANE_VIP)' --set-string 'nico-dhcp.config.kea.hookParameters.provisioningServer=$(DATAPLANE_VIP)')
+DATAPLANE_INFRA_SET := \
+  $(if $(DATAPLANE_VIP),--set 'metallb.enabled=true') \
+  $(if $(DATAPLANE_POOL),--set-string 'metallb.addresses[0]=$(DATAPLANE_POOL)') \
+  $(if $(DATAPLANE_NIC),--set-string 'metallb.interfaces[0]=$(DATAPLANE_NIC)' --set-string 'nodeNetwork.enabled=true' --set-string 'nodeNetwork.interface=$(DATAPLANE_NIC)') \
+  $(if $(DATAPLANE_NODE_IP),--set-string 'nodeNetwork.address=$(DATAPLANE_NODE_IP)')
+DATAPLANE_PREREQS_SET := \
+  $(if $(DATAPLANE_VIP),--set 'metallb.enabled=true' --set 'nmstate.enabled=true')
 
 # Vault topology auto-selection. HA (3-node Raft) needs >=3 schedulable nodes;
 # a single-node (SNO/VM) or 2-node cluster falls back to standalone Vault (file
@@ -164,7 +195,8 @@ bootstrap-cluster:
 		NICO_NETMASK='$(NICO_NETMASK)' \
 		NICO_OPENSHIFT_VERSION='$(NICO_OPENSHIFT_VERSION)' \
 		NICO_PULL_SECRET='$(NICO_PULL_SECRET)' \
-		NICO_VM_PREFIX='$(NICO_VM_PREFIX)'
+		NICO_VM_PREFIX='$(NICO_VM_PREFIX)' \
+		NICO_LOCAL_GATEWAY='$(NICO_LOCAL_GATEWAY)'
 
 bootstrap-clean:
 	@bash cluster/bootstrap.sh clean \
@@ -338,6 +370,8 @@ helm-template: helm-dep-build
 deploy-prereqs:
 	helm upgrade --install -n default nvidia-infra-controller-prereqs \
 		helm/nvidia-infra-controller-prereqs/ \
+		$(if $(PREREQS_VALUES),-f $(PREREQS_VALUES)) \
+		$(DATAPLANE_PREREQS_SET) \
 		--wait --timeout 15m
 
 deploy-cloud-infra: helm-dep-build
@@ -426,6 +460,8 @@ deploy-site-infra: helm-dep-build
 	helm upgrade --install -n nico-system nico-site-infra \
 		helm/infra-site/ \
 		--create-namespace --timeout 15m \
+		$(if $(SITE_INFRA_VALUES),-f $(SITE_INFRA_VALUES)) \
+		$(DATAPLANE_INFRA_SET) \
 		$(VAULT_OVERRIDES)
 
 vault-init:
@@ -561,6 +597,7 @@ deploy-site: ensure-ssh-host-key patch-vendor
 		-f helm/values/nico-core.yaml $(SITE_CONFIG_FLAG) \
 		--set 'nico-api.certificate.extraDnsNames[0]=carbide-api.forge' \
 		--set 'nico-api.certificate.extraDnsNames[1]=nico-api-grpc-nico-system.$(CLUSTER_DOMAIN)' \
+		$(DATAPLANE_VIP_SET) \
 		--post-renderer $(POST_RENDERER) --post-renderer-args $(SITE_KUSTOMIZE)
 	@# Create a passthrough route for nico-admin-cli gRPC access (HTTP/2
 	@# requires passthrough — edge/reencrypt downgrades to HTTP/1.1).
@@ -635,6 +672,134 @@ endif
 # separately collides on the namespace and the `flow` ServiceAccount.
 
 deploy-all-site: deploy-site-infra vault-init deploy-site
+
+# Deploy to all configured sites in one command. Define SITES in deploy.env:
+#   SITES=site1 site2 site3
+deploy-all-sites:
+	@[ -n "$(SITES)" ] || { echo "ERROR: SITES is required, e.g. SITES='site1 site2' make deploy-all-sites"; exit 1; }
+	@for site in $(SITES); do \
+		echo "" && \
+		echo "╔═══════════════════════════════════════════════════╗" && \
+		echo "║  Deploying $$site  ║" && \
+		echo "╚═══════════════════════════════════════════════════╝" && \
+		$(MAKE) deploy-dataplane-vip SITE=$$site || { echo "✗ $$site failed"; exit 1; }; \
+	done
+	@echo ""
+	@echo "╔═══════════════════════════════════════════════════╗"
+	@echo "║  ✓ All sites deployed successfully  ║"
+	@echo "╚═══════════════════════════════════════════════════╝"
+
+# Create a new per-site Core override file with boilerplate. Only creates the
+# file; user must edit unbound forwarders (upstream DNS) and siteConfig (networks).
+new-site:
+	@[ -n "$(SITE)" ] || { echo "ERROR: SITE required, e.g. make new-site SITE=mysite"; exit 1; }
+	@[ ! -f helm/values/nico-core-$(SITE).yaml ] || { echo "ERROR: helm/values/nico-core-$(SITE).yaml already exists"; exit 1; }
+	@cp helm/values/prereqs-example.yaml helm/values/prereqs-$(SITE).yaml
+	@cp helm/values/infra-site-example.yaml helm/values/infra-site-$(SITE).yaml
+	@cp helm/values/nico-core-example.yaml helm/values/nico-core-$(SITE).yaml
+	@echo "✓ Created all per-site values files:"
+	@echo "  • helm/values/prereqs-$(SITE).yaml"
+	@echo "  • helm/values/infra-site-$(SITE).yaml"
+	@echo "  • helm/values/nico-core-$(SITE).yaml"
+	@echo ""
+	@echo "Next, edit deploy.env and add:"
+	@echo "  SITE=$(SITE)"
+	@echo "  DATAPLANE_VIP_$(shell echo $(SITE) | tr a-z A-Z)=<your-vip>"
+	@echo "  DATAPLANE_POOL_$(shell echo $(SITE) | tr a-z A-Z)=<vip>-<vip+10>"
+	@echo "  DATAPLANE_NIC_$(shell echo $(SITE) | tr a-z A-Z)=<nic>"
+	@echo "  DATAPLANE_NODE_IP_$(shell echo $(SITE) | tr a-z A-Z)=<node-ip>"
+	@echo ""
+	@echo "Then edit helm/values/nico-core-$(SITE).yaml for siteConfig and DNS."
+	@echo ""
+	@echo "Then run: make deploy-dataplane-vip"
+
+# Patch OVN gateway config for secondary-VLAN VIPs (one-time, brief rollout).
+# ONLY needed if your VIP is on a secondary NIC — if it's on the primary network,
+# skip this. Day-1 clusters get this via NICO_LOCAL_GATEWAY bootstrap flag.
+patch-ovn-gateway:
+	@echo "=== Patching OVN gateway config (routingViaHost + ipForwarding) ==="
+	@oc patch network.operator cluster --type merge \
+		-p '{"spec":{"defaultNetwork":{"ovnKubernetesConfig":{"gatewayConfig":{"routingViaHost":true,"ipForwarding":"Global"}}}}}'
+	@echo "Waiting for ovnkube-node rollout..."
+	@oc rollout status daemonset/ovnkube-node -n openshift-ovn-kubernetes --timeout=10m || \
+		{ echo "⚠ Still rolling out (may take a few minutes)"; true; }
+	@echo "✓ OVN gateway patched"
+
+# Enable the MetalLB data-plane VIPs for a site on an EXISTING install. Needs
+# SITE=<name> (or deploy.env) and helm/values/nico-core-<SITE>.yaml.
+# Each step is an idempotent helm upgrade, so it only adds the MetalLB bits.
+deploy-dataplane-vip:
+	@[ -n "$(SITE)" ] || { echo "ERROR: SITE is required (set in deploy.env or CLI, e.g. make deploy-dataplane-vip SITE=myhub)"; exit 1; }
+	@[ -n "$(DATAPLANE_VIP)" ] || { echo "ERROR: DATAPLANE_VIP is required (set in deploy.env)"; exit 1; }
+	@[ -n "$(DATAPLANE_POOL)" ] || { echo "ERROR: DATAPLANE_POOL is required (set in deploy.env)"; exit 1; }
+	@[ -n "$(DATAPLANE_NIC)" ] || { echo "ERROR: DATAPLANE_NIC is required (set in deploy.env)"; exit 1; }
+	@[ -n "$(DATAPLANE_NODE_IP)" ] || { echo "ERROR: DATAPLANE_NODE_IP is required (set in deploy.env)"; exit 1; }
+	@echo "=== Step 1/3: Deploy prerequisites (MetalLB + NMState operators) ==="
+	$(MAKE) deploy-prereqs    SITE=$(SITE)
+	@echo "Waiting for the MetalLB operator to reconcile its CRDs..."
+	@oc rollout status deployment/metallb-operator -n metallb-system --timeout=5m 2>/dev/null || \
+		oc wait --for=condition=Progressing deployment/metallb-operator -n metallb-system --timeout=5m 2>/dev/null || \
+		echo "⚠ MetalLB operator still deploying (OK, it takes a moment)"
+	$(MAKE) verify-prereqs-deployed
+	@echo ""
+	@echo "=== Step 2/3: Deploy site infrastructure (Vault, NATS, PG, MetalLB config) ==="
+	$(MAKE) deploy-site-infra SITE=$(SITE)
+	$(MAKE) verify-infra-deployed
+	@echo ""
+	@echo "=== Step 3/3: Deploy NICo Core with data-plane services ==="
+	$(MAKE) deploy-site       SITE=$(SITE)
+	$(MAKE) verify-core-deployed
+	@echo ""
+	@echo "=== All stages deployed successfully ==="
+	@echo "Next: make verify-dataplane-vip"
+
+# Verify each deployment stage independently (for debugging or re-running checks).
+verify-prereqs-deployed:
+	@echo "=== Checking prerequisites ==="
+	@oc get ns metallb-system >/dev/null || { echo "✗ metallb-system namespace not found"; exit 1; }
+	@oc get ns openshift-nmstate >/dev/null || { echo "✗ openshift-nmstate namespace not found"; exit 1; }
+	@oc get crd ipaddresspools.metallb.io >/dev/null || { echo "✗ MetalLB CRD not found"; exit 1; }
+	@oc get crd nmstates.nmstate.io >/dev/null || { echo "✗ NMState CRD not found"; exit 1; }
+	@echo "✓ All prerequisites present"
+
+verify-infra-deployed:
+	@echo "=== Checking site infrastructure ==="
+	@oc get metallb -n metallb-system >/dev/null || { echo "✗ MetalLB CR not found"; exit 1; }
+	@oc get ipaddresspool -n metallb-system >/dev/null || { echo "✗ IPAddressPool not found"; exit 1; }
+	@oc get crd nodenetworkconfigurationpolicies.nmstate.io >/dev/null || { echo "✗ NNCP CRD not found"; exit 1; }
+	@echo "✓ Infrastructure deployed"
+
+verify-core-deployed:
+	@echo "=== Checking NICo Core ==="
+	@oc get svc -n nico-system nico-api >/dev/null || { echo "✗ nico-api service not found"; exit 1; }
+	@oc get pod -n nico-system -l app=nico-api >/dev/null || { echo "✗ nico-api pods not found"; exit 1; }
+	@echo "✓ NICo Core deployed"
+
+# In-cluster health check for the data-plane VIPs. Flags the common failures
+# (EXTERNAL-IP <pending>, NNCP not configured, speaker down). The external
+# reachability probe can't be automated generically (needs a host on the VLAN),
+# so it's printed as the final manual step.
+verify-dataplane-vip:
+	@echo "=== LoadBalancer services (want an EXTERNAL-IP, not <pending>) ==="
+	@oc get svc -n nico-system 2>/dev/null | grep -E "NAME|LoadBalancer" || echo "  (none — is externalService enabled in your overlay?)"
+	@echo "=== NodeNetworkConfigurationPolicy (want STATUS=Available/SuccessfullyConfigured) ==="
+	@oc get nncp 2>/dev/null || echo "  (none — is nodeNetwork enabled?)"
+	@echo "=== MetalLB pool + advertisement ==="
+	@oc get ipaddresspool,l2advertisement -n metallb-system 2>/dev/null || echo "  (none)"
+	@echo "=== MetalLB pods (want controller + speaker Running) ==="
+	@oc get pods -n metallb-system 2>/dev/null | grep -E "NAME|controller|speaker" || echo "  (operator not installed?)"
+	@echo "=== OVN gateway mode (want routingViaHost:true + ipForwarding:Global for a secondary-NIC VIP) ==="
+	@oc get network.operator cluster -o jsonpath='{.spec.defaultNetwork.ovnKubernetesConfig.gatewayConfig}{"\n"}' 2>/dev/null || true
+	@echo ""
+	@echo "Final check (manual) — from a host ON the data-plane VLAN:"
+	@echo "  nc -vz <VIP> <port>     # api 443, pxe 8080, dns 53"
+	@echo "  VIP answers ARP but ports time out => OVN gateway settings missing."
+	@echo ""
+	@lb=$$(oc get svc -n nico-system -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.name}{"\t"}{.status.loadBalancer.ingress[0].ip}{"\n"}{end}' 2>/dev/null); \
+	if [ -z "$$lb" ]; then echo "FAIL: no LoadBalancer services in nico-system (externalService not enabled?)"; exit 1; fi; \
+	pending=$$(echo "$$lb" | awk -F'\t' '$$2==""{print $$1}'); \
+	if [ -n "$$pending" ]; then echo "FAIL: LoadBalancer services with no EXTERNAL-IP (<pending>):"; echo "$$pending" | sed 's/^/  /'; exit 1; fi; \
+	echo "OK: all LoadBalancer services have an EXTERNAL-IP assigned."
 
 # =============================================================================
 # CRC (single-node) — overrides for local development on CodeReady Containers
