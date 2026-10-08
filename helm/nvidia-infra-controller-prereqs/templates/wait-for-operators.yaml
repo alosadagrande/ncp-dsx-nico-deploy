@@ -6,7 +6,7 @@ Waits for operator CRDs to be available before Crunchy PostgreSQL
 clusters and cert-manager Certificates can be created.
 */}}
 
-{{- if or .Values.certManager.enabled .Values.crunchyPostgres.enabled .Values.externalSecrets.enabled }}
+{{- if or .Values.certManager.enabled .Values.crunchyPostgres.enabled .Values.externalSecrets.enabled .Values.metallb.enabled .Values.nmstate.enabled }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -119,6 +119,16 @@ spec:
                 sleep 5
               done
               echo "ExternalSecretsConfig created — ESO controller will deploy"
+              {{- end }}
+              {{- if .Values.metallb.enabled }}
+              wait_crd ipaddresspools.metallb.io
+              {{- end }}
+              {{- if .Values.nmstate.enabled }}
+              wait_crd nmstates.nmstate.io
+              echo "Creating NMState operand..."
+              sa /apis/nmstate.io/v1/nmstates/nmstate '{"apiVersion":"nmstate.io/v1","kind":"NMState","metadata":{"name":"nmstate"}}'
+              wait_crd nodenetworkconfigurationpolicies.nmstate.io
+              echo "NMState ready — NNCP CRD available"
               {{- end }}
               echo "All operator CRDs ready"
 {{- end }}
