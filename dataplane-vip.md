@@ -63,9 +63,14 @@ make deploy-site-infra SITE_INFRA_VALUES=helm/values/infra-site-<site>.yaml
 ```
 
 Do **not** use `make deploy-dataplane-vip` for FLAT — it requires
-`DATAPLANE_NIC`/`DATAPLANE_NODE_IP` (the secondary-VLAN path). The rest of this
-document (the VLAN prerequisite, local-gateway, NNCP) applies only to the
-dedicated-VLAN flow.
+`DATAPLANE_NIC`/`DATAPLANE_NODE_IP` (the secondary-VLAN path). Only the
+**dedicated-NIC VLAN prerequisite**, the **NNCP**, and the **OVN local-gateway**
+instructions in the rest of this document are specific to the dedicated-VLAN
+flow and do not apply to FLAT. The provisioning prerequisites **still apply to
+FLAT**: a real **`siteConfig`** (networks/pools) in your `nico-core-<site>.yaml`
+(item 5 of Prerequisites), and a **DHCP relay** (`ip helper-address <nico-dhcp
+VIP>`, item 4) whenever the provisioned hosts are not on the same L2 segment as
+the `nico-dhcp` VIP.
 
 ## The one non-obvious constraint
 
