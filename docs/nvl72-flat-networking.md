@@ -187,7 +187,7 @@ The new VLAN is **routed** to them, and DHCP reaches `nico-dhcp` through a **rel
   ┌─────▼─────────────────┐  (2) dhcp-relay on SVI .6.1           │
   │ SVI VLAN 250 = .6.1    │──── ip helper-address 172.16.2.15 ───┤ nico-dhcp .2.15
   │ (gateway of VLAN 250)  │     broadcast → unicast, giaddr=.6.1  │
-  └─────┬─────────────────┘     → NICo selects the segment by giaddr
+  └─────┬─────────────────┘     → intended: NICo selects segment by giaddr (verify — see note)
         │ (3) inter-VLAN routing 250↔200 (unicast)                │
         ├────────────────────────────────────────────────────────► nico-pxe .2.12
         ├────────────────────────────────────────────────────────► unbound  .2.13
@@ -195,8 +195,14 @@ The new VLAN is **routed** to them, and DHCP reaches `nico-dhcp` through a **rel
 ```
 
 - **DHCP** (broadcast) does not cross VLANs by itself → a **relay** on the VLAN 250 SVI
-  points to `172.16.2.15`. The relay stamps `giaddr=.6.1`; NICo picks the segment whose
-  prefix contains `.6.1` → the `172.16.6.0/24` HostInband.
+  points to `172.16.2.15`. The relay stamps `giaddr=.6.1`; the intent is that NICo selects
+  the HostInband segment whose prefix contains `.6.1` (→ `172.16.6.0/24`).
+  > **Verify before relying on this for the host path.** The NICo protocol flow documents the
+  > `relay_address` (`giaddr`) selector explicitly for **BMC** DHCP; the **host** provisioning
+  > DHCP path (`GetDhcpDiscovery(mac)`) is not confirmed to select the segment by `giaddr` in
+  > NICo **v2.3.0-pr**. Treat the `giaddr`→segment mapping for host PXE as a **deployment
+  > prerequisite to validate** against your NICo version, not guaranteed behavior. If it does
+  > not hold, keep the host OS L2-adjacent to `nico-dhcp` (the C-L2 variant, §5.2).
 - **PXE / DNS / API** (unicast) reach VLAN 200 via plain inter-VLAN routing.
 - **Collision is gone**: the bastion has no interface or relay on VLAN 250, so it never
   sees the tray's DISCOVER. The only DHCP reachable from VLAN 250 is `nico-dhcp`.
@@ -277,7 +283,7 @@ prefix = "10.180.64.0/24"
 | NICo VIPs | VLAN 200 `.2.12-.15` | VLAN 200 `.2.12-.15` (unchanged) |
 | DHCP collision with bastion | yes → per-MAC `ignore` | no (bastion not on VLAN 250) |
 | Fabric changes | none | new VLAN + retag + routing + relay |
-| OCP changes | none | siteConfig HostInband prefix only |
+| OCP changes | none | siteConfig HostInband prefix + gateway (`172.16.6.1`) |
 | OOB isolation | none (shared) | BMC on VLAN 200, host on VLAN 250 |
 | Recommended for | shared-lab pilot | production FLAT |
 
