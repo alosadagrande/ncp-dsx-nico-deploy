@@ -1,0 +1,99 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Red Hat, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# =============================================================================
+# Production-style site-config overlay for the upstream Core nico chart.
+#
+# Layered on top of helm/values/nico-core.yaml
+# (helm -f nico-core.yaml -f nico-core-site.yaml ...).
+#
+# Supplies the resource pools and network segments the Core API requires to
+# start (crates/api-core/src/setup.rs rejects a config with no pools). Unlike
+# helm/values/nico-core-mat.yaml, this overlay does NOT enable any RBAC or
+# attestation bypasses — bypass_rbac / permissive_mode / allow_insecure_discovery
+# are intentionally absent, and attestation_enabled / tpm_required keep their
+# secure defaults. Real security enforcement stays on.
+#
+# Prefixes and pools configured for the NVL72 LaunchPad cluster.
+# FLAT: BMC compute-tray: 172.16.2.0/24, host inband: 172.16.2.0/24.
+# =============================================================================
+
+nico-api:
+  siteConfig:
+    enabled: true
+    nicoApiSiteConfig: |
+      initial_domain_name = "nico.local"
+      attestation_enabled = false
+      tpm_required = false
+
+      [site_explorer]
+      run_interval = "30s"
+      allow_zero_dpu_hosts = true
+      dpu_policy = "manage"
+
+      # Underlay DPU provisioning compute-tray network
+      #[networks.nvl72-underlay]
+      #type = "underlay"
+      #prefix = "172.16.2.0/24"
+      #gateway = "172.16.2.1"
+      #mtu = 1500
+      #reserve_first = 5
+
+      # Placeholder admin segment — required by DB constraint
+      # (network_segment::admin() fails if none exist), but unused
+      # without DPUs. Uses a dummy prefix with no real connectivity.
+      [networks.nvl72-admin]
+      type = "admin"
+      prefix = "10.180.64.0/24"
+      gateway = "10.180.64.1"
+      mtu = 1500
+      reserve_first = 0
+
+      # Host inband network. FLAT
+      # allocation_strategy = "reserved": DHCP only answers MACs with an
+      # existing reservation (expected-machine interfaces), never hands out
+      # dynamic leases. Deterministic for PXE and avoids colliding with the
+      # bastion dnsmasq on this shared /24. Default would be "dynamic".
+      # NOTE: only applied when the segment is first seeded — reconcile warns
+      # but does NOT update an already-seeded segment (network_segment.rs
+      # reconcile_network_defs: drift => warn). To flip an existing segment,
+      # delete it (nico-admin-cli network-segment delete) and re-seed.
+      [networks.nvl72-inband]
+      type = "hostinband"
+      prefix = "172.16.2.0/24"
+      gateway = "172.16.2.1"
+      mtu = 1500
+      reserve_first = 5
+      allocation_strategy = "reserved"
+
+      [pools.lo-ip]
+      type = "ipv4"
+      ranges = [{ start = "192.168.126.100", end = "192.168.126.150" }]
+
+      [pools.vpc-dpu-lo]
+      type = "ipv4"
+      ranges = [{ start = "10.101.0.1", end = "10.101.0.254" }]
+
+      [pools.secondary-vtep-ip]
+      type = "ipv4"
+      ranges = [{ start = "10.102.0.1", end = "10.102.0.254" }]
+
+      [pools.vni]
+      type = "integer"
+      ranges = [{ start = "100000", end = "199999" }]
+
+      [pools.vpc-vni]
+      type = "integer"
+      ranges = [{ start = "0", end = "100" }]
+
+      [pools.external-vpc-vni]
+      type = "integer"
+      ranges = [{ start = "300000", end = "399999" }]
+
+      [pools.vlan-id]
+      type = "integer"
+      ranges = [{ start = "100", end = "4094" }]
+
+      [pools.fnn-asn]
+      type = "integer"
+      ranges = [{ start = "4200000000", end = "4200000254" }]

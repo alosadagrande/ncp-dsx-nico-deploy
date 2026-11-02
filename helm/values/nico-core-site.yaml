@@ -25,19 +25,22 @@ nico-api:
       initial_domain_name = "nico.local"
       attestation_enabled = false
       tpm_required = false
+      # ASN del fabric para los route-targets EVPN (verificado: el csl usa 32325, no 11414)
+      datacenter_asn = 32325
 
       [site_explorer]
       run_interval = "30s"
-      allow_zero_dpu_hosts = true
-      dpu_policy = "ignore"
+      dpu_policy = "manage"
+      #admin_segment_type_non_dpu= false
 
       # Underlay DPU provisioning compute-tray network
-      #[networks.nvl72-underlay]
-      #type = "underlay"
-      #prefix = "172.16.2.0/24"
-      #gateway = "172.16.2.1"
-      #mtu = 1500
-      #reserve_first = 5
+      [networks.nvl72-underlay]
+      type = "underlay"
+      prefix = "172.16.2.0/24"
+      gateway = "172.16.2.1"
+      mtu = 1500
+      reserve_first = 5
+      allocation_strategy = "reserved"
 
       # Placeholder admin segment — required by DB constraint
       # (network_segment::admin() fails if none exist), but unused
@@ -58,13 +61,13 @@ nico-api:
       # but does NOT update an already-seeded segment (network_segment.rs
       # reconcile_network_defs: drift => warn). To flip an existing segment,
       # delete it (nico-admin-cli network-segment delete) and re-seed.
-      [networks.nvl72-inband]
-      type = "hostinband"
-      prefix = "172.16.2.0/24"
-      gateway = "172.16.2.1"
-      mtu = 1500
-      reserve_first = 5
-      allocation_strategy = "reserved"
+      #[networks.nvl72-inband]
+      #type = "hostinband"
+      #prefix = "172.16.2.0/24"
+      #gateway = "172.16.2.1"
+      #mtu = 1500
+      #reserve_first = 5
+      #allocation_strategy = "reserved"
 
       [pools.lo-ip]
       type = "ipv4"
@@ -84,7 +87,7 @@ nico-api:
 
       [pools.vpc-vni]
       type = "integer"
-      ranges = [{ start = "0", end = "100" }]
+      ranges = [{ start = "200000", end = "240000" }]
 
       [pools.external-vpc-vni]
       type = "integer"
@@ -97,3 +100,15 @@ nico-api:
       [pools.fnn-asn]
       type = "integer"
       ranges = [{ start = "4200000000", end = "4200000254" }]
+
+      # Launchpad specific config fabric
+      [fnn]
+      use_vpc_vrf_loopback = true
+
+      [fnn.admin_vpc]
+      enabled = true
+      vpc_vni = 200000                       # del pool vpc-vni (200000-240000), L3VNI de la VPC admin
+
+      [fnn.admin_vpc.routing_profile]
+      internal = true
+      route_target_imports = [ { asn = 32325, vni = 245001 } ]   # importa la OOB (nico-pxe 172.16.2.12)
