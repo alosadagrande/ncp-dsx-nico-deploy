@@ -55,7 +55,7 @@ nico-api:
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
       command: ["sh", "-c", "cp -r /x86_64 /forge-boot-artifacts/blobs/internal"]
     - name: boot-artifacts-aarch64
-      image: quay.io/alosadag/boot-artifacts-aarch64:latest-amd64
+      image: quay.io/alosadag/boot-artifacts-aarch64:pr760-dirty-amd64
       command: ["sh", "-c", "cp -r /aarch64 /apt /forge-boot-artifacts/blobs/internal"]
   resources:
     requests:
@@ -180,7 +180,7 @@ nico-pxe:
       image: quay.io/alosadag/boot-artifacts-x86_64:latest-amd64
       command: ["sh", "-c", "cp -r /x86_64 /forge-boot-artifacts/blobs/internal"]
     - name: boot-artifacts-aarch64
-      image: quay.io/alosadag/boot-artifacts-aarch64:latest-amd64
+      image: quay.io/alosadag/boot-artifacts-aarch64:pr760-dirty-amd64
       command: ["sh", "-c", "cp -r /aarch64 /apt /forge-boot-artifacts/blobs/internal"]
 nico-ssh-console-rs:
   enabled: true
