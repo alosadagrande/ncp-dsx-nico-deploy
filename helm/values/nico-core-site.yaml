@@ -112,3 +112,14 @@ nico-api:
       [fnn.admin_vpc.routing_profile]
       internal = true
       route_target_imports = [ { asn = 32325, vni = 245001 } ]   # importa la OOB (nico-pxe 172.16.2.12)
+
+      # Named routing profile for tenant FNN VPCs. The key MUST be UPPERCASE:
+      # routing_profile_type is a serde `rename_all = "UPPERCASE"` enum
+      # (api-model/src/tenant/identity_config.rs), so the Core looks it up as
+      # "EXTERNAL" even though the REST API prints it lowercase. The tenant ncx
+      # default is EXTERNAL. Without this entry no tenant VPC can be created
+      # (error: routing_profile not found: EXTERNAL from the Site sync workflow).
+      # Same pattern as admin_vpc: forward host->OOB by importing VNI 245001.
+      [fnn.routing_profiles.EXTERNAL]
+      internal = true
+      route_target_imports = [ { asn = 32325, vni = 245001 } ]
